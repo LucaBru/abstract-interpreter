@@ -59,8 +59,8 @@ pub Statement: Box<ast::Statement> = {
 }
 
 pub StatementTerm: Box<ast::Statement> = {
-    <name:"identifier"> ":=" <value:ArithmeticExp> => {
-    Box::new(ast::Statement::Assignment { name, value })
+    <var:"identifier"> ":=" <value:ArithmeticExp> => {
+    Box::new(ast::Statement::Assignment(ast::Assignment{var, value}))
   },
   "skip" => Box::new(ast::Statement::Skip),
   "{" <Statement> "}"
@@ -83,21 +83,20 @@ pub BooleanExp: Box<ast::BooleanExp> = {
     })
   },
 
-
 #[precedence(level="4")] #[assoc(side="left")]
   <lhs: ArithmeticExp> "=" <rhs: ArithmeticExp> => {
-    Box::new(ast::BooleanExp::ArithmeticExpComparison{
+    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition{
       lhs,
-      operator: ast::ComparisonOperator::Equal,
+      operator: ast::ConditionOperator::Equal,
       rhs
-    })
+    }))
   },
   <lhs: ArithmeticExp> "<" <rhs: ArithmeticExp> => {
-    Box::new(ast::BooleanExp::ArithmeticExpComparison{
+    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition{
       lhs,
-      operator: ast::ComparisonOperator::StrictlyLess,
+      operator: ast::ConditionOperator::StrictlyLess,
       rhs
-    })
+    }))
   },
 }
 
