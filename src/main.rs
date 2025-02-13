@@ -1,6 +1,11 @@
+use std::collections::HashMap;
+
+use abstract_domains::interval::Interval;
 use grammar::StatementParser;
+use interpreter::interpreter;
 use lalrpop_util::lalrpop_mod;
 use lexer::Lexer;
+use state::State;
 
 mod abstract_domains;
 mod ast;
@@ -15,7 +20,12 @@ fn main() {
     let source_code = std::fs::read_to_string("myscript.toy").unwrap();
     let lexer = Lexer::new(&source_code);
     let parser = StatementParser::new();
-    let ast = parser.parse(lexer).unwrap();
+    let program = parser.parse(lexer).unwrap();
 
-    println!("{:?}", ast);
+    println!("{:?}", program);
+
+    let initial_state: State<'_, Interval> = State::initialize(&program, HashMap::new());
+    let invariants = interpreter(&program, &initial_state);
+
+    println!("{:#?}", invariants)
 }

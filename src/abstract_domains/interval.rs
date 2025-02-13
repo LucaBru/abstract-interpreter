@@ -238,6 +238,13 @@ impl AbstractDomain for Interval {
     fn union_abstraction(&self, other: &Self) -> Self {
         Self::normal_form(min(self.low, other.low), max(self.upper, other.upper))
     }
+
+    fn constant_abstraction(c: i64) -> Self {
+        Interval {
+            low: Int::Num(c),
+            upper: Int::Num(c),
+        }
+    }
 }
 /*
 impl BackwardAdd for Interval {
