@@ -1,15 +1,11 @@
-use std::{
-    cell::{LazyCell, OnceCell},
-    collections::{HashMap, HashSet},
-    sync::{LazyLock, OnceLock},
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
     ast::{Assignment, Statement},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct State<'a, D: AbstractDomain> {
     vars: HashMap<&'a str, D>,
 }
@@ -44,7 +40,9 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
     }
 
     pub fn update(&mut self, var: &'a str, value: D) {
-        self.vars.insert(var, value);
+        if self.vars.contains_key(var) {
+            self.vars.insert(var, value);
+        }
     }
 
     pub fn union(&self, other: &Self) -> Self {
@@ -67,5 +65,11 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
 
     pub fn lookup(&self, var: &'b str) -> &D {
         self.vars.get(var).unwrap()
+    }
+
+    pub fn bottom() -> Self {
+        State {
+            vars: HashMap::new(),
+        }
     }
 }

@@ -25,10 +25,10 @@ impl From<ParseBoolError> for LexicalError {
 
 #[derive(Logos, Clone, Debug, PartialEq)]
 #[logos(skip r"[ \t\n\f]+", skip r"#.*\n?", error = LexicalError)]
-pub enum Token {
-    #[regex("[_a-zA-Z][_0-9a-zA-Z]*", |lex| lex.slice().to_string())]
-    Identifier(String),
-    #[regex("[1-9][0-9]*", |lex| lex.slice().parse())]
+pub enum Token<'input> {
+    #[regex("[_a-zA-Z][_0-9a-zA-Z]*", |lex| lex.slice())]
+    Identifier(&'input str),
+    #[regex("[0-9]*", |lex| lex.slice().parse())]
     Integer(i64),
     #[token("if")]
     If,
@@ -45,7 +45,6 @@ pub enum Token {
 
     #[token("{")]
     LCurlyBracket,
-
     #[token("}")]
     RCurlyBracket,
 
@@ -69,7 +68,6 @@ pub enum Token {
 
     #[regex("true|false", |lex| lex.slice().parse())]
     Boolean(bool),
-    False,
     #[token("=")]
     Equal,
     #[token("<")]
@@ -78,9 +76,10 @@ pub enum Token {
     Not,
     #[token("&")]
     And,
+    Error,
 }
 
-impl fmt::Display for Token {
+impl<'input> fmt::Display for Token<'input> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }

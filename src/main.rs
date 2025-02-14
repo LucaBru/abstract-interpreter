@@ -11,6 +11,7 @@ mod abstract_domains;
 mod ast;
 mod interpreter;
 mod lexer;
+mod propagation_algo;
 mod state;
 mod tokens;
 
@@ -19,8 +20,7 @@ lalrpop_mod!(grammar);
 fn main() {
     let source_code = std::fs::read_to_string("myscript.toy").unwrap();
     let lexer = Lexer::new(&source_code);
-    let parser = StatementParser::new();
-    let program = parser.parse(lexer).unwrap();
+    let program = StatementParser::new().parse(&source_code, lexer).unwrap();
 
     println!("{:?}", program);
 

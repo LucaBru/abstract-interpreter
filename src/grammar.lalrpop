@@ -1,15 +1,17 @@
 
 use crate::tokens::{Token, LexicalError};
 use crate::ast;
+use std::ops::Not;
 
-grammar;
+grammar<'input>(input: &'input str);
 
 extern {
   type Location = usize;
   type Error = LexicalError;
 
-  enum Token {
-    "identifier" => Token::Identifier(<String>),
+  enum Token<'input> {
+    "error" => Token::Error,
+    "identifier" => Token::Identifier(<&'input str>),
     "int" => Token::Integer(<i64>),
     "bool" => Token::Boolean(<bool>),
     "if" => Token::If,
@@ -23,6 +25,7 @@ extern {
     "(" => Token::LParen,
     ")" => Token::RParen,
     ":=" => Token::Assign,
+
     ";" => Token::Semicolon,
     "+" => Token::OperatorAdd,
     "-" => Token::OperatorSub,
@@ -35,14 +38,11 @@ extern {
   }
 }
 
-pub Statement: Box<ast::Statement> = {
+pub Statement: Box<ast::Statement<'input>> = {
   #[precedence(level="1")]
   StatementTerm,
-  
-  #[precedence(level="2")] #[assoc(side="left")]
-  <lhs:Statement> ";" <rhs:Statement> => {
-    Box::new(ast::Statement::Composition{ lhs, rhs })
-  },
+
+  #[precedence(level="2")]
   "if" <guard: BooleanExp> "then" <true_branch: StatementTerm> "else" <false_branch: StatementTerm> => {
     Box::new(ast::Statement::Conditional {
       guard,
@@ -55,10 +55,15 @@ pub Statement: Box<ast::Statement> = {
       guard,
       body
     })
-  }
+  },
+
+  #[precedence(level="3")] #[assoc(side="left")]
+  <lhs:Statement> ";" <rhs:Statement> => {
+    Box::new(ast::Statement::Composition{ lhs, rhs })
+  },
 }
 
-pub StatementTerm: Box<ast::Statement> = {
+pub StatementTerm: Box<ast::Statement<'input>> = {
     <var:"identifier"> ":=" <value:ArithmeticExp> => {
     Box::new(ast::Statement::Assignment(ast::Assignment{var, value}))
   },
@@ -66,13 +71,13 @@ pub StatementTerm: Box<ast::Statement> = {
   "{" <Statement> "}"
 }
 
-pub BooleanExp: Box<ast::BooleanExp> = {
+pub BooleanExp: Box<ast::BooleanExp<'input>> = {
   #[precedence(level="1")]
   <guard:"bool"> => Box::new(ast::BooleanExp::Boolean(guard)),
 
   #[precedence(level="2")] #[assoc(side="right")]
   <exp: BooleanExp> "!" <rhs: BooleanExp> => {
-    Box::new(ast::BooleanExp::Not(exp))
+    Box::new(ast::BooleanExp::not(*exp))
   },
 
 #[precedence(level="3")] #[assoc(side="left")]
@@ -85,22 +90,22 @@ pub BooleanExp: Box<ast::BooleanExp> = {
 
 #[precedence(level="4")] #[assoc(side="left")]
   <lhs: ArithmeticExp> "=" <rhs: ArithmeticExp> => {
-    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition{
+    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition::normal_form(
       lhs,
-      operator: ast::ConditionOperator::Equal,
+      ast::ConditionOperator::Equal,
       rhs
-    }))
+    )))
   },
   <lhs: ArithmeticExp> "<" <rhs: ArithmeticExp> => {
-    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition{
+    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition::normal_form(
       lhs,
-      operator: ast::ConditionOperator::StrictlyLess,
+      ast::ConditionOperator::StrictlyLess,
       rhs
-    }))
+    )))
   },
 }
 
-pub ArithmeticExp: Box<ast::ArithmeticExp> = {
+pub ArithmeticExp: Box<ast::ArithmeticExp<'input>> = {
   #[precedence(level="1")]
   Term,
 
@@ -137,9 +142,12 @@ pub ArithmeticExp: Box<ast::ArithmeticExp> = {
   },
 }
 
-pub Term: Box<ast::ArithmeticExp> = {
+pub Term: Box<ast::ArithmeticExp<'input>> = {
   <val:"int"> => {
     Box::new(ast::ArithmeticExp::Integer(val))
+  },
+  "-" <val:"int"> => {
+    Box::new(ast::ArithmeticExp::Integer(-val))
   },
   <name:"identifier"> => {
     Box::new(ast::ArithmeticExp::Variable(name))

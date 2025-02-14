@@ -1,14 +1,13 @@
-use std::{collections::HashMap, os::linux::raw::stat};
-
 use crate::{
-    abstract_domains::{abstract_domain::AbstractDomain, interval::Interval},
+    abstract_domains::abstract_domain::AbstractDomain,
     ast::{ArithmeticExp, Assignment, BooleanExp, Operator, Statement},
+    propagation_algo::PropagationAlgo,
     state::State,
 };
 
-type Invariant<'a, D: AbstractDomain> = State<'a, D>;
+type Invariant<'a, D> = State<'a, D>;
 
-fn abstract_aexp_eval<'a, D: AbstractDomain>(exp: &ArithmeticExp, state: &State<'a, D>) -> D {
+fn abstract_aexp_eval<'a, D: AbstractDomain>(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
     match exp {
         ArithmeticExp::Variable(var) => state.lookup(var).clone(),
         ArithmeticExp::Integer(x) => D::constant_abstraction(*x),
@@ -26,14 +25,25 @@ fn abstract_aexp_eval<'a, D: AbstractDomain>(exp: &ArithmeticExp, state: &State<
 }
 
 fn abstract_bexp_semantic<'a, D: AbstractDomain>(
-    exp: &BooleanExp,
+    exp: &BooleanExp<'a>,
     state: &State<'a, D>,
 ) -> State<'a, D> {
-    state.clone()
+    let mut prop_algo = PropagationAlgo::build(exp, state);
+    let (satisfiable, updated_vars) = prop_algo.refinement_propagation(exp);
+
+    if !satisfiable {
+        return State::bottom();
+    }
+
+    let mut state = state.clone();
+    updated_vars
+        .into_iter()
+        .for_each(|(var, value)| state.update(var, value));
+    state
 }
 
 fn abstract_statement_semantic<'a, D: AbstractDomain>(
-    statement: &'a Statement,
+    statement: &Statement<'a>,
     state: &State<'a, D>,
 ) -> State<'a, D> {
     match statement {
@@ -55,8 +65,12 @@ fn abstract_statement_semantic<'a, D: AbstractDomain>(
             let true_state =
                 abstract_statement_semantic(true_branch, &abstract_bexp_semantic(guard, state));
 
-            let false_state =
-                abstract_statement_semantic(false_branch, &abstract_bexp_semantic(guard, state));
+            let not_guard = !*guard.clone();
+            let false_state = abstract_statement_semantic(
+                false_branch,
+                &abstract_bexp_semantic(&not_guard, state),
+            );
+
             true_state.union(&false_state)
         }
         Statement::While { guard, body } => {
@@ -67,8 +81,8 @@ fn abstract_statement_semantic<'a, D: AbstractDomain>(
 }
 
 pub fn interpreter<'a, D: AbstractDomain>(
-    program: &'a Statement,
-    state: &'a State<D>,
+    program: &Statement<'a>,
+    state: &State<'a, D>,
 ) -> Vec<Invariant<'a, D>> {
     //TODO: add loops invariant
     Vec::from([abstract_statement_semantic(program, state)])

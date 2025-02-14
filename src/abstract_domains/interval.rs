@@ -4,7 +4,10 @@ use std::{
     sync::RwLock,
 };
 
-use super::{abstract_domain::AbstractDomain, int::Int};
+use super::{
+    abstract_domain::{AbstractDomain, IntervalBound},
+    int::Int,
+};
 
 pub static M: RwLock<Int> = RwLock::new(Int::NegInf);
 pub static N: RwLock<Int> = RwLock::new(Int::PosInf);
@@ -23,7 +26,7 @@ const ZERO: Interval = Interval {
     upper: Int::Num(0),
 };
 
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Copy, Debug, Eq)]
 pub struct Interval {
     low: Int,
     upper: Int,
@@ -220,12 +223,6 @@ impl Div for Interval {
 }
 
 impl AbstractDomain for Interval {
-    fn arithmetic_cond_abstraction(&self, c: crate::ast::ArithmeticCondition) -> Self {
-        panic!()
-    }
-    fn assignment_abstraction(&self, a: crate::ast::Assignment) -> Self {
-        panic!()
-    }
     fn bottom() -> Self {
         BOTTOM
     }
@@ -245,56 +242,27 @@ impl AbstractDomain for Interval {
             upper: Int::Num(c),
         }
     }
-}
-/*
-impl BackwardAdd for Interval {
-    type Output = Self;
-    fn backward_add(self, lhs: Self, rhs: Self) -> Refinement<Self> {
-        Refinement {
-            lhs: lhs.intersect(self - rhs),
-            rhs: rhs.intersect(self - lhs),
-        }
-    }
-}
 
-impl BackwardSub for Interval {
-    type Output = Self;
-    fn backward_sub(self, lhs: Self, rhs: Self) -> Refinement<Self> {
-        Refinement {
-            lhs: lhs.intersect(self + rhs),
-            rhs: rhs.intersect(lhs - self),
-        }
-    }
-}
+    fn interval_abstraction(low: IntervalBound, upper: IntervalBound) -> Self {
+        let low = match low {
+            IntervalBound::NegInf => Int::NegInf,
+            IntervalBound::Num(x) => Int::Num(x),
+            _ => panic!("PosInf found while parsing a concrete interval to an abstract domain"),
+        };
 
-impl BackwardMul for Interval {
-    type Output = Self;
-    fn backward_mul(self, lhs: Self, rhs: Self) -> Refinement<Self> {
-        Refinement {
-            lhs: lhs.intersect(self / rhs),
-            rhs: rhs.intersect(self / lhs),
-        }
-    }
-}
+        let upper = match upper {
+            IntervalBound::PosInf => Int::PosInf,
+            IntervalBound::Num(x) => Int::Num(x),
+            _ => panic!("NegInf found while parsing a concrete interval to an abstract domain"),
+        };
 
-impl BackwardDiv for Interval {
-    type Output = Self;
-    fn backward_div(self, lhs: Self, rhs: Self) -> Refinement<Self> {
-        let one = Interval::from("[-1,1]");
-        Refinement {
-            lhs: lhs.intersect((self + one) * rhs),
-            rhs: rhs.intersect(lhs / (self + one)),
-        }
+        Self::normal_form(low, upper)
     }
 }
-*/
 
 #[cfg(test)]
 mod test {
-    use std::{
-        cmp::Ordering,
-        ops::{Add, Div, Mul},
-    };
+    use std::ops::{Add, Div, Mul};
 
     use crate::abstract_domains::{
         int::Int,
@@ -353,7 +321,6 @@ mod test {
         assert_eq!(singleton(1) <= singleton(2), false);
 
         restricted_domain(-5, 5);
-        dbg!(Interval::partial_cmp(&[-3, 2].into(), &[-5, 2].into()));
         assert!(minus_inf_to(0) <= [-6, 0].into());
         assert!(TOP <= [-6, 6].into());
         assert_eq!(

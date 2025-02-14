@@ -1,40 +1,42 @@
+use std::ops::{Neg, Not};
+
 #[derive(Clone, Debug, PartialEq)]
-pub enum Statement {
-    Assignment(Assignment),
+pub enum Statement<'a> {
+    Assignment(Assignment<'a>),
     Skip,
     Composition {
-        lhs: Box<Statement>,
-        rhs: Box<Statement>,
+        lhs: Box<Statement<'a>>,
+        rhs: Box<Statement<'a>>,
     },
     Conditional {
-        guard: Box<BooleanExp>,
-        true_branch: Box<Statement>,
-        false_branch: Box<Statement>,
+        guard: Box<BooleanExp<'a>>,
+        true_branch: Box<Statement<'a>>,
+        false_branch: Box<Statement<'a>>,
     },
     While {
-        guard: Box<BooleanExp>,
-        body: Box<Statement>,
+        guard: Box<BooleanExp<'a>>,
+        body: Box<Statement<'a>>,
     },
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Assignment {
-    pub var: String,
-    pub value: Box<ArithmeticExp>,
+pub struct Assignment<'a> {
+    pub var: &'a str,
+    pub value: Box<ArithmeticExp<'a>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum ArithmeticExp {
+pub enum ArithmeticExp<'a> {
     Integer(i64),
-    Variable(String),
+    Variable(&'a str),
     BinaryOperation {
-        lhs: Box<ArithmeticExp>,
+        lhs: Box<ArithmeticExp<'a>>,
         operator: Operator,
-        rhs: Box<ArithmeticExp>,
+        rhs: Box<ArithmeticExp<'a>>,
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Operator {
     Add,
     Sub,
@@ -43,31 +45,80 @@ pub enum Operator {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArithmeticCondition {
-    pub lhs: Box<ArithmeticExp>,
+pub struct ArithmeticCondition<'a> {
+    pub lhs: Box<ArithmeticExp<'a>>,
     pub operator: ConditionOperator,
-    pub rhs: Box<ArithmeticExp>,
+}
+
+impl<'a> ArithmeticCondition<'a> {
+    pub fn normal_form(
+        lhs: Box<ArithmeticExp<'a>>,
+        operator: ConditionOperator,
+        rhs: Box<ArithmeticExp<'a>>,
+    ) -> Self {
+        let lhs = Box::new(ArithmeticExp::BinaryOperation {
+            lhs,
+            operator: Operator::Sub,
+            rhs,
+        });
+        ArithmeticCondition { lhs, operator }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum BooleanExp {
+pub enum BooleanExp<'a> {
     Boolean(bool),
-    ArithmeticCondition(ArithmeticCondition),
+    ArithmeticCondition(ArithmeticCondition<'a>),
     And {
-        lhs: Box<BooleanExp>,
-        rhs: Box<BooleanExp>,
+        lhs: Box<BooleanExp<'a>>,
+        rhs: Box<BooleanExp<'a>>,
     },
     Or {
-        lhs: Box<BooleanExp>,
-        rhs: Box<BooleanExp>,
+        lhs: Box<BooleanExp<'a>>,
+        rhs: Box<BooleanExp<'a>>,
     },
-    Not(Box<BooleanExp>),
+    Not(Box<BooleanExp<'a>>),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl<'a> Not for BooleanExp<'a> {
+    type Output = BooleanExp<'a>;
+    fn not(self) -> Self::Output {
+        match self {
+            BooleanExp::Boolean(x) => BooleanExp::Boolean(!x),
+            BooleanExp::ArithmeticCondition(mut arithmetic_condition) => {
+                arithmetic_condition.operator = -arithmetic_condition.operator;
+                BooleanExp::ArithmeticCondition(arithmetic_condition)
+            }
+            BooleanExp::And { lhs, rhs } => BooleanExp::Or {
+                lhs: Box::new(BooleanExp::Not(lhs)),
+                rhs: Box::new(BooleanExp::Not(rhs)),
+            },
+
+            BooleanExp::Or { lhs, rhs } => BooleanExp::And {
+                lhs: Box::new(BooleanExp::Not(lhs)),
+                rhs: Box::new(BooleanExp::Not(rhs)),
+            },
+            BooleanExp::Not(x) => *x,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ConditionOperator {
     Equal,
-    StrictlyGreater,
+    NotEqual,
     StrictlyLess,
     GreaterOrEqual,
+}
+
+impl Neg for ConditionOperator {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        match self {
+            ConditionOperator::Equal => ConditionOperator::NotEqual,
+            ConditionOperator::NotEqual => ConditionOperator::Equal,
+            ConditionOperator::StrictlyLess => ConditionOperator::GreaterOrEqual,
+            ConditionOperator::GreaterOrEqual => ConditionOperator::StrictlyLess,
+        }
+    }
 }
