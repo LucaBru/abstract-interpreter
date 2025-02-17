@@ -37,7 +37,11 @@ impl Interval {
         let m = *M.read().unwrap();
         let n = *N.read().unwrap();
 
-        if m > n && low != upper {
+        if low > upper {
+            return Interval::bottom();
+        }
+
+        if m > n && low < upper {
             return TOP;
         } else if m > n {
             return Interval { low, upper };
@@ -416,47 +420,4 @@ mod test {
         //[-5,-1] / [0,2] = [-inf, inf]
         //assert_eq!(Interval::from("[-5,1]") / "[0,2]".into(), TOP);
     }
-
-    /*
-    #[test]
-    fn intv_abs_domain_abstraction() {
-        let conc_intv = ConcreteIntv(I::Num(0), I::Num(10));
-
-        set_domain_bounds(1.into(), 0.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), TOP);
-
-        set_domain_bounds(0.into(), 10.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), "[0,10]".into());
-
-        set_domain_bounds(1.into(), 100.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), "[-inf, 10]".into());
-
-        set_domain_bounds(0.into(), 5.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), "[0, inf]".into());
-
-        set_domain_bounds(1.into(), 2.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), TOP);
-
-        set_domain_bounds(100.into(), 100.into());
-        assert_eq!(Interval::intv_abstraction(conc_intv), "[-inf, 100]".into());
-        set_domain_bounds((-100).into(), 100.into());
-        assert_eq!(
-            Interval::intv_abstraction(ConcreteIntv(I::NegInf, I::Num(-200))),
-            Interval::from("[-inf,-100]")
-        );
-        assert_eq!(
-            Interval::intv_abstraction(ConcreteIntv(I::Num(2000), I::PosInf)),
-            Interval::from("[100, inf]")
-        );
-
-        interval_domain();
-        assert_eq!(
-            Interval::intv_abstraction(ConcreteIntv(I::NegInf, I::Num(0))),
-            Interval::from("[-inf,0]")
-        );
-        assert_eq!(
-            Interval::intv_abstraction(ConcreteIntv(I::Num(0), I::PosInf)),
-            Interval::from("[0, inf]")
-        );
-    } */
 }

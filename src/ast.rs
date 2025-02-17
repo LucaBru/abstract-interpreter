@@ -1,4 +1,7 @@
-use std::ops::{Neg, Not};
+use std::{
+    collections::HashSet,
+    ops::{Neg, Not},
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement<'a> {
@@ -17,6 +20,26 @@ pub enum Statement<'a> {
         guard: Box<BooleanExp<'a>>,
         body: Box<Statement<'a>>,
     },
+}
+
+impl<'a> Statement<'a> {
+    pub fn extract_vars(&self) -> HashSet<&'a str> {
+        match self {
+            Statement::Skip => HashSet::new(),
+            Statement::Assignment(Assignment { var, value: _ }) => HashSet::from([&var[..]]),
+            Statement::Composition { lhs, rhs }
+            | Statement::Conditional {
+                guard: _,
+                true_branch: lhs,
+                false_branch: rhs,
+            } => {
+                let mut vars = Self::extract_vars(&lhs);
+                vars.extend(Self::extract_vars(&rhs));
+                vars
+            }
+            Statement::While { guard: _, body } => Self::extract_vars(&body),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +88,16 @@ impl<'a> ArithmeticCondition<'a> {
     }
 }
 
+impl<'a> Not for ArithmeticCondition<'a> {
+    type Output = Self;
+    fn not(self) -> Self::Output {
+        ArithmeticCondition {
+            operator: -self.operator,
+            ..self
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum BooleanExp<'a> {
     Boolean(bool),
@@ -77,7 +110,6 @@ pub enum BooleanExp<'a> {
         lhs: Box<BooleanExp<'a>>,
         rhs: Box<BooleanExp<'a>>,
     },
-    Not(Box<BooleanExp<'a>>),
 }
 
 impl<'a> Not for BooleanExp<'a> {
@@ -85,20 +117,16 @@ impl<'a> Not for BooleanExp<'a> {
     fn not(self) -> Self::Output {
         match self {
             BooleanExp::Boolean(x) => BooleanExp::Boolean(!x),
-            BooleanExp::ArithmeticCondition(mut arithmetic_condition) => {
-                arithmetic_condition.operator = -arithmetic_condition.operator;
-                BooleanExp::ArithmeticCondition(arithmetic_condition)
-            }
+            BooleanExp::ArithmeticCondition(x) => BooleanExp::ArithmeticCondition(!x),
             BooleanExp::And { lhs, rhs } => BooleanExp::Or {
-                lhs: Box::new(BooleanExp::Not(lhs)),
-                rhs: Box::new(BooleanExp::Not(rhs)),
+                lhs: Box::new(!*lhs),
+                rhs: Box::new(!*rhs),
             },
 
             BooleanExp::Or { lhs, rhs } => BooleanExp::And {
-                lhs: Box::new(BooleanExp::Not(lhs)),
-                rhs: Box::new(BooleanExp::Not(rhs)),
+                lhs: Box::new(!*lhs),
+                rhs: Box::new(!*rhs),
             },
-            BooleanExp::Not(x) => *x,
         }
     }
 }

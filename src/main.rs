@@ -18,6 +18,13 @@ mod tokens;
 lalrpop_mod!(grammar);
 
 fn main() {
+/*     {
+        let mut m_lock = M.write().unwrap();
+        *m_lock = Int::PosInf;
+
+        let mut n_lock = N.write().unwrap();
+        *n_lock = Int::NegInf;
+    } */
     let source_code = std::fs::read_to_string("myscript.toy").unwrap();
     let lexer = Lexer::new(&source_code);
     let program = StatementParser::new().parse(&source_code, lexer).unwrap();

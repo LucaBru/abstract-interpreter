@@ -29,6 +29,7 @@ fn abstract_bexp_semantic<'a, D: AbstractDomain>(
     state: &State<'a, D>,
 ) -> State<'a, D> {
     let mut prop_algo = PropagationAlgo::build(exp, state);
+
     let (satisfiable, updated_vars) = prop_algo.refinement_propagation(exp);
 
     if !satisfiable {
@@ -39,6 +40,7 @@ fn abstract_bexp_semantic<'a, D: AbstractDomain>(
     updated_vars
         .into_iter()
         .for_each(|(var, value)| state.update(var, value));
+
     state
 }
 

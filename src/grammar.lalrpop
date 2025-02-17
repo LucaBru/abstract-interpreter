@@ -64,7 +64,7 @@ pub Statement: Box<ast::Statement<'input>> = {
 }
 
 pub StatementTerm: Box<ast::Statement<'input>> = {
-    <var:"identifier"> ":=" <value:ArithmeticExp> => {
+  <var:"identifier"> ":=" <value:ArithmeticExp> => {
     Box::new(ast::Statement::Assignment(ast::Assignment{var, value}))
   },
   "skip" => Box::new(ast::Statement::Skip),
@@ -73,29 +73,25 @@ pub StatementTerm: Box<ast::Statement<'input>> = {
 
 pub BooleanExp: Box<ast::BooleanExp<'input>> = {
   #[precedence(level="1")]
-  <guard:"bool"> => Box::new(ast::BooleanExp::Boolean(guard)),
+  BooleanExpTerm,
 
-  #[precedence(level="2")] #[assoc(side="right")]
-  <exp: BooleanExp> "!" <rhs: BooleanExp> => {
+    "!" <exp: BooleanExp> => {
     Box::new(ast::BooleanExp::not(*exp))
   },
 
-#[precedence(level="3")] #[assoc(side="left")]
+  #[precedence(level="3")] #[assoc(side="left")]
   <lhs: BooleanExp> "&" <rhs: BooleanExp> => {
     Box::new(ast::BooleanExp::And{
       lhs,
       rhs
     })
   },
+}
 
-#[precedence(level="4")] #[assoc(side="left")]
-  <lhs: ArithmeticExp> "=" <rhs: ArithmeticExp> => {
-    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition::normal_form(
-      lhs,
-      ast::ConditionOperator::Equal,
-      rhs
-    )))
-  },
+
+pub BooleanExpTerm: Box<ast::BooleanExp<'input>> = {
+  <guard:"bool"> => Box::new(ast::BooleanExp::Boolean(guard)),
+
   <lhs: ArithmeticExp> "<" <rhs: ArithmeticExp> => {
     Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition::normal_form(
       lhs,
@@ -103,6 +99,16 @@ pub BooleanExp: Box<ast::BooleanExp<'input>> = {
       rhs
     )))
   },
+
+  <lhs: ArithmeticExp> "=" <rhs: ArithmeticExp> => {
+    Box::new(ast::BooleanExp::ArithmeticCondition(ast::ArithmeticCondition::normal_form(
+      lhs,
+      ast::ConditionOperator::Equal,
+      rhs
+    )))
+  },
+
+  "("<BooleanExp>")",
 }
 
 pub ArithmeticExp: Box<ast::ArithmeticExp<'input>> = {

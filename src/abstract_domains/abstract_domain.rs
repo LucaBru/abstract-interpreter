@@ -35,6 +35,7 @@ pub trait AbstractDomain:
         result: Self,
         operator: Operator,
     ) -> [Self; 2] {
+        
         match operator {
             Operator::Add => {
                 let lhs_ref = lhs.intersection_abstraction(&(result - rhs));

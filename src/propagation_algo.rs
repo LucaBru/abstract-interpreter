@@ -12,6 +12,15 @@ struct Node<'a, D: AbstractDomain> {
     var: Option<&'a str>,
 }
 
+impl<'a, D: AbstractDomain> Node<'a, D> {
+    fn backward_update(&mut self, value: D) {
+        if self.var.is_some() {
+            self.value = value;
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct PropagationAlgo<'a, D: AbstractDomain> {
     values: HashMap<usize, Node<'a, D>>,
 }
@@ -28,11 +37,6 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
         state_prop: &State<'a, D>,
         i: usize,
     ) -> HashMap<usize, Node<'a, D>> {
-        let v = match exp {
-            BooleanExp::Boolean(x) if *x == false => D::bottom(),
-            _ => D::top(),
-        };
-
         let mut sub_trees_hashmap = match exp {
             BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
                 let mut r = Self::build_from_bexp(lhs, state_prop, i * 2 + 1);
@@ -43,6 +47,11 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                 Self::build_from_aexp(lhs, state_prop, i * 2 + 1)
             }
             _ => HashMap::new(),
+        };
+
+        let v = match exp {
+            BooleanExp::Boolean(x) if *x == false => D::bottom(),
+            _ => D::top(),
         };
 
         sub_trees_hashmap.insert(i, Node {
@@ -119,7 +128,6 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                         D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf)
                     }
                 };
-
                 tree.get_mut(&i).unwrap().value =
                     tree[&(i * 2 + 1)].value.intersection_abstraction(&intv);
             }
@@ -150,8 +158,13 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
     fn backward_prop_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
         match exp {
             BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
-                tree.get_mut(&(i * 2 + 1)).unwrap().value = tree[&i].value;
-                tree.get_mut(&(i * 2 + 2)).unwrap().value = tree[&i].value;
+                let value = tree[&i].value;
+                if let Some(left_node) = tree.get_mut(&(i * 2 + 1)) {
+                    left_node.backward_update(value);
+                };
+                if let Some(right_node) = tree.get_mut(&(i * 2 + 1)) {
+                    right_node.backward_update(value);
+                };
                 Self::backward_prop_bexp(lhs, tree, i * 2 + 1);
                 Self::backward_prop_bexp(rhs, tree, i * 2 + 2);
             }
@@ -173,21 +186,15 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                     *operator,
                 );
 
-                match lhs.as_ref() {
-                    ArithmeticExp::Integer(_) => (),
-                    _ => {
-                        tree.get_mut(&(i * 2 + 1)).unwrap().value = refinement[0];
-                        Self::backward_prop_aexp(lhs, tree, i * 2 + 1);
-                    }
-                }
+                tree.get_mut(&(i * 2 + 1))
+                    .unwrap()
+                    .backward_update(refinement[0]);
+                Self::backward_prop_aexp(lhs, tree, i * 2 + 1);
 
-                match rhs.as_ref() {
-                    ArithmeticExp::Integer(_) => (),
-                    _ => {
-                        tree.get_mut(&(i * 2 + 2)).unwrap().value = refinement[1];
-                        Self::backward_prop_aexp(rhs, tree, i * 2 + 2);
-                    }
-                }
+                tree.get_mut(&(i * 2 + 2))
+                    .unwrap()
+                    .backward_update(refinement[1]);
+                Self::backward_prop_aexp(rhs, tree, i * 2 + 2);
             }
             _ => (),
         }
@@ -199,9 +206,12 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
         while !fixed_point && satisfiable {
             let prev = self.values.clone();
             Self::forward_prop_bexp(exp, &mut self.values, 0);
-            Self::backward_prop_bexp(exp, &mut self.values, 0);
+
             satisfiable = self.values[&0].value != D::bottom();
-            fixed_point = prev == self.values;
+            if satisfiable {
+                Self::backward_prop_bexp(exp, &mut self.values, 0);
+                fixed_point = prev == self.values;
+            }
         }
 
         let updated_vars = self
@@ -210,6 +220,7 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
             .filter(|node| node.var.is_some())
             .map(|node| (node.var.clone().unwrap(), node.value))
             .collect();
+
         (satisfiable, updated_vars)
     }
 }

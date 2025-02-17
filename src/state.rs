@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
-    ast::{Assignment, Statement},
+    ast::Statement,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -11,26 +11,8 @@ pub struct State<'a, D: AbstractDomain> {
 }
 
 impl<'a, 'b, D: AbstractDomain> State<'a, D> {
-    fn extract_vars(program: &'a Statement) -> HashSet<&'a str> {
-        match program {
-            Statement::Skip => HashSet::new(),
-            Statement::Assignment(Assignment { var, value: _ }) => HashSet::from([&var[..]]),
-            Statement::Composition { lhs, rhs }
-            | Statement::Conditional {
-                guard: _,
-                true_branch: lhs,
-                false_branch: rhs,
-            } => {
-                let mut vars = Self::extract_vars(&lhs);
-                vars.extend(Self::extract_vars(&rhs));
-                vars
-            }
-            Statement::While { guard: _, body } => Self::extract_vars(&body),
-        }
-    }
-
     pub fn initialize(program: &'a Statement, vars_initial_values: HashMap<&'b str, D>) -> Self {
-        let vars = Self::extract_vars(program);
+        let vars = program.extract_vars();
         let vars = vars
             .clone()
             .into_iter()

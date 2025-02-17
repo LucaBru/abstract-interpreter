@@ -37,7 +37,7 @@ impl Sub for Int {
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
             (NegInf, x) | (x, NegInf) if x != NegInf => NegInf,
-            (PosInf, x) | (PosInf, x) if x != PosInf => PosInf,
+            (PosInf, x) | (x, PosInf) if x != PosInf => PosInf,
             (Num(lhs), Num(rhs)) => Num(lhs - rhs),
             _ => panic!("Trying to compute PosInf + NegInf or vice-versa, which is undefined "),
         }
