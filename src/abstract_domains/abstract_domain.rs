@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fmt::Debug,
     ops::{Add, Div, Mul, Sub},
 };
@@ -16,6 +17,7 @@ pub trait AbstractDomain:
     + Clone
     + Copy
     + Debug
+    + Into<String>
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
@@ -28,6 +30,8 @@ pub trait AbstractDomain:
     fn intersection_abstraction(&self, other: &Self) -> Self;
     fn constant_abstraction(c: i64) -> Self;
     fn interval_abstraction(low: IntervalBound, upper: IntervalBound) -> Self;
+    fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self;
+    fn narrowing(&self, rhs: &Self) -> Self;
 
     fn backward_arithmetic_operator(
         lhs: Self,
@@ -35,7 +39,6 @@ pub trait AbstractDomain:
         result: Self,
         operator: Operator,
     ) -> [Self; 2] {
-        
         match operator {
             Operator::Add => {
                 let lhs_ref = lhs.intersection_abstraction(&(result - rhs));

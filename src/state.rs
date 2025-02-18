@@ -1,11 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use crate::{
-    abstract_domains::abstract_domain::AbstractDomain,
-    ast::Statement,
-};
+use crate::{abstract_domains::abstract_domain::AbstractDomain, ast::Statement};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct State<'a, D: AbstractDomain> {
     vars: HashMap<&'a str, D>,
 }
@@ -53,5 +50,39 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         State {
             vars: HashMap::new(),
         }
+    }
+
+    pub fn widening(&self, rhs: &Self, widening_thresholds: &HashSet<i64>) -> Self {
+        if self.vars.is_empty() {
+            return rhs.clone();
+        } else if rhs.vars.is_empty() {
+            return self.clone();
+        }
+        assert!(self.vars.keys().all(|var| rhs.vars.contains_key(var)));
+        let vars = self
+            .vars
+            .iter()
+            .map(|(var, value)| (*var, value.widening(rhs.lookup(var), widening_thresholds)))
+            .collect();
+        State { vars }
+    }
+
+    pub fn narrowing(&self, rhs: &Self) -> Self {
+        if self.vars.is_empty() {
+            return rhs.clone();
+        } else if rhs.vars.is_empty() {
+            return self.clone();
+        }
+        assert!(self.vars.keys().all(|var| rhs.vars.contains_key(var)));
+        let vars = self
+            .vars
+            .iter()
+            .map(|(var, value)| (*var, value.narrowing(rhs.lookup(var))))
+            .collect();
+        State { vars }
+    }
+
+    pub fn vars(&self) -> HashSet<&'a str> {
+        self.vars.iter().map(|(key, _)| *key).collect()
     }
 }

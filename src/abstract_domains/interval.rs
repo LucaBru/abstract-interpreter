@@ -1,5 +1,6 @@
 use std::{
     cmp::{Ordering, max, min},
+    collections::HashSet,
     ops::{Add, Div, Mul, Sub},
     sync::RwLock,
 };
@@ -261,6 +262,73 @@ impl AbstractDomain for Interval {
         };
 
         Self::normal_form(low, upper)
+    }
+
+    fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self {
+        let thresholds: Vec<Int> = thresholds.into_iter().map(|t| Int::Num(*t)).collect();
+        let low = match self.low <= rhs.low {
+            true => self.low,
+            _ => {
+                let mut t = Int::NegInf;
+                thresholds.iter().for_each(|x| {
+                    if *x > t && *x < self.low {
+                        t = *x
+                    }
+                });
+                t
+            }
+        };
+
+        let upper = match self.upper >= rhs.upper {
+            true => self.upper,
+            _ => {
+                let mut t = Int::PosInf;
+                thresholds.iter().for_each(|x| {
+                    if *x < t && *x > self.upper {
+                        t = *x
+                    }
+                });
+                t
+            }
+        };
+
+        Self::normal_form(low, upper)
+    }
+
+    fn narrowing(&self, rhs: &Self) -> Self {
+        let Interval { low: a, upper: b } = *self;
+        let Interval { low: c, upper: d } = *rhs;
+        let mut low = a;
+        if a == Int::NegInf {
+            low = c;
+        }
+        let mut upper = b;
+        if b == Int::PosInf {
+            upper = d;
+        }
+
+        dbg!(self, rhs, low, upper);
+        Interval { low, upper }
+    }
+}
+
+impl Into<String> for Interval {
+    fn into(self) -> String {
+        let Interval { low, upper } = self;
+
+        let low = match low {
+            Int::NegInf => "-inf".to_string(),
+            Int::Num(x) => format!("{x}").to_string(),
+            _ => "None".to_string(),
+        };
+
+        let upper = match upper {
+            Int::PosInf => "inf".to_string(),
+            Int::Num(x) => format!("{x}").to_string(),
+            _ => "None".to_string(),
+        };
+
+        format!("[{low},{upper}]").to_string()
     }
 }
 

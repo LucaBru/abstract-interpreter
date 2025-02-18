@@ -1,0 +1,69 @@
+Composition { lhs: Assignment(Assignment { var: "x", value: Integer(1) }), rhs: While { guard: ArithmeticCondition(ArithmeticCondition { lhs: BinaryOperation { lhs: Variable("x"), operator: Sub, rhs: Integer(100) }, operator: StrictlyLess }), body: Assignment(Assignment { var: "x", value: BinaryOperation { lhs: Variable("x"), operator: Add, rhs: Integer(1) } }) } }
+Semantic of loop with body: Assignment(
+    Assignment {
+        var: "x",
+        value: BinaryOperation {
+            lhs: Variable(
+                "x",
+            ),
+            operator: Add,
+            rhs: Integer(
+                1,
+            ),
+        },
+    },
+)
+Pre-condition: State {
+    vars: {
+        "x": Interval {
+            low: Num(
+                1,
+            ),
+            upper: Num(
+                1,
+            ),
+        },
+    },
+}
+Post-condition: State {
+    vars: {
+        "x": Interval {
+            low: Num(
+                100,
+            ),
+            upper: Num(
+                100,
+            ),
+        },
+    },
+}
+Kleene iterations:
+x: "[1,1]"	"[1,inf]"	
+
+
+[
+    State {
+        vars: {
+            "x": Interval {
+                low: Num(
+                    1,
+                ),
+                upper: Num(
+                    100,
+                ),
+            },
+        },
+    },
+    State {
+        vars: {
+            "x": Interval {
+                low: Num(
+                    100,
+                ),
+                upper: Num(
+                    100,
+                ),
+            },
+        },
+    },
+]

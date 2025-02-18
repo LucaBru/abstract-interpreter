@@ -40,6 +40,33 @@ impl<'a> Statement<'a> {
             Statement::While { guard: _, body } => Self::extract_vars(&body),
         }
     }
+
+    pub fn extract_constant(&self) -> HashSet<i64> {
+        match self {
+            Statement::Skip => HashSet::new(),
+            Statement::Assignment(Assignment { var: _, value }) => value.extract_constants(),
+            Statement::Conditional {
+                guard,
+                true_branch,
+                false_branch,
+            } => guard
+                .extract_constant()
+                .into_iter()
+                .chain(true_branch.extract_constant())
+                .chain(false_branch.extract_constant())
+                .collect(),
+            Statement::Composition { lhs, rhs } => lhs
+                .extract_constant()
+                .into_iter()
+                .chain(rhs.extract_constant())
+                .collect(),
+            Statement::While { guard, body } => guard
+                .extract_constant()
+                .into_iter()
+                .chain(body.extract_constant())
+                .collect(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -57,6 +84,24 @@ pub enum ArithmeticExp<'a> {
         operator: Operator,
         rhs: Box<ArithmeticExp<'a>>,
     },
+}
+
+impl<'a> ArithmeticExp<'a> {
+    pub fn extract_constants(&self) -> HashSet<i64> {
+        match self {
+            ArithmeticExp::Integer(x) => HashSet::from([*x]),
+            ArithmeticExp::BinaryOperation {
+                lhs,
+                operator: _,
+                rhs,
+            } => lhs
+                .extract_constants()
+                .into_iter()
+                .chain(rhs.extract_constants())
+                .collect(),
+            _ => HashSet::new(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -127,6 +172,22 @@ impl<'a> Not for BooleanExp<'a> {
                 lhs: Box::new(!*lhs),
                 rhs: Box::new(!*rhs),
             },
+        }
+    }
+}
+
+impl<'a> BooleanExp<'a> {
+    pub fn extract_constant(&self) -> HashSet<i64> {
+        match self {
+            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
+                lhs.extract_constants()
+            }
+            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => lhs
+                .extract_constant()
+                .into_iter()
+                .chain(rhs.extract_constant())
+                .collect(),
+            _ => HashSet::new(),
         }
     }
 }

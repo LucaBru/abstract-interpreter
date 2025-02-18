@@ -20,6 +20,14 @@ impl<'a, D: AbstractDomain> Node<'a, D> {
     }
 }
 
+fn left_child(i: usize) -> usize {
+    i * 2 + 1
+}
+
+fn right_child(i: usize) -> usize {
+    i * 2 + 2
+}
+
 #[derive(Debug)]
 pub struct PropagationAlgo<'a, D: AbstractDomain> {
     values: HashMap<usize, Node<'a, D>>,
@@ -39,12 +47,13 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
     ) -> HashMap<usize, Node<'a, D>> {
         let mut sub_trees_hashmap = match exp {
             BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
-                let mut r = Self::build_from_bexp(lhs, state_prop, i * 2 + 1);
-                r.extend(Self::build_from_bexp(rhs, state_prop, i * 2 + 2));
-                r
+                Self::build_from_bexp(lhs, state_prop, left_child(i))
+                    .into_iter()
+                    .chain(Self::build_from_bexp(rhs, state_prop, right_child(i)))
+                    .collect()
             }
             BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                Self::build_from_aexp(lhs, state_prop, i * 2 + 1)
+                Self::build_from_aexp(lhs, state_prop, left_child(i))
             }
             _ => HashMap::new(),
         };
@@ -86,60 +95,60 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                 lhs,
                 operator: _,
                 rhs,
-            } => {
-                let mut r = Self::build_from_aexp(lhs, state, i * 2 + 1);
-                r.extend(Self::build_from_aexp(rhs, state, i * 2 + 2));
-                r
-            }
+            } => Self::build_from_aexp(lhs, state, left_child(i))
+                .into_iter()
+                .chain(Self::build_from_aexp(rhs, state, right_child(i)))
+                .collect(),
             _ => HashMap::new(),
         };
         sub_tree_hashmap.insert(i, v);
         sub_tree_hashmap
     }
 
-    fn forward_prop_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
+    fn forward_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
         match exp {
             BooleanExp::And { lhs, rhs } => {
-                Self::forward_prop_bexp(lhs, tree, i * 2 + 1);
-                Self::forward_prop_bexp(rhs, tree, i * 2 + 2);
-                tree.get_mut(&i).unwrap().value = tree[&(i * 2 + 1)]
+                Self::forward_bexp(lhs, tree, left_child(i));
+                Self::forward_bexp(rhs, tree, right_child(i));
+                tree.get_mut(&i).unwrap().value = tree[&left_child(i)]
                     .value
-                    .intersection_abstraction(&tree[&(i * 2 + 2)].value);
+                    .intersection_abstraction(&tree[&(right_child(i))].value);
             }
             BooleanExp::Or { lhs, rhs } => {
-                Self::forward_prop_bexp(lhs, tree, i * 2 + 1);
-                Self::forward_prop_bexp(rhs, tree, i * 2 + 2);
-                tree.get_mut(&i).unwrap().value = tree[&(i * 2 + 1)]
+                Self::forward_bexp(lhs, tree, left_child(i));
+                Self::forward_bexp(rhs, tree, right_child(i));
+                tree.get_mut(&i).unwrap().value = tree[&(left_child(i))]
                     .value
-                    .union_abstraction(&tree[&(i * 2 + 2)].value);
+                    .union_abstraction(&tree[&(right_child(i))].value);
             }
             BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator }) => {
-                Self::forward_prop_aexp(lhs, tree, i * 2 + 1);
-                let intv = match operator {
+                /*
+                Note that in case of constant domain, arithmetic forward operator are very rough, i.e. they cause precision loss
+                e.g. take x = [60, 60]. Given x < 0 we obtain an operator which is equal to
+                */
+                Self::forward_aexp(lhs, tree, left_child(i));
+                let slice = match operator {
                     ConditionOperator::Equal => D::constant_abstraction(0),
-                    ConditionOperator::NotEqual if tree[&i].value == D::constant_abstraction(0) => {
-                        D::bottom()
-                    }
-                    ConditionOperator::NotEqual => tree[&i].value,
+                    ConditionOperator::NotEqual => D::top(),
                     ConditionOperator::StrictlyLess => {
                         D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1))
                     }
-                    ConditionOperator::GreaterOrEqual => {
-                        D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf)
-                    }
+                    _ => D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf),
                 };
-                tree.get_mut(&i).unwrap().value =
-                    tree[&(i * 2 + 1)].value.intersection_abstraction(&intv);
+
+                tree.get_mut(&i).unwrap().value = tree[&(left_child(i))]
+                    .value
+                    .intersection_abstraction(&slice)
             }
             _ => (),
         };
     }
 
-    fn forward_prop_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
+    fn forward_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
         match exp {
             ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
-                Self::forward_prop_aexp(lhs, tree, i * 2 + 1);
-                Self::forward_prop_aexp(rhs, tree, i * 2 + 2);
+                Self::forward_aexp(lhs, tree, left_child(i));
+                Self::forward_aexp(rhs, tree, right_child(i));
                 let forward_op = match operator {
                     Operator::Add => D::add,
                     Operator::Sub => D::sub,
@@ -147,69 +156,69 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                     Operator::Div => D::div,
                 };
                 tree.get_mut(&i).unwrap().value = forward_op(
-                    tree[&(i * 2 + 1)].value.clone(),
-                    tree[&(i * 2 + 2)].value.clone(),
+                    tree[&(left_child(i))].value.clone(),
+                    tree[&(right_child(i))].value.clone(),
                 );
             }
             _ => (),
         };
     }
 
-    fn backward_prop_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
+    fn backward_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
         match exp {
             BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
                 let value = tree[&i].value;
-                if let Some(left_node) = tree.get_mut(&(i * 2 + 1)) {
+                if let Some(left_node) = tree.get_mut(&(left_child(i))) {
                     left_node.backward_update(value);
                 };
-                if let Some(right_node) = tree.get_mut(&(i * 2 + 1)) {
+                if let Some(right_node) = tree.get_mut(&(left_child(i))) {
                     right_node.backward_update(value);
                 };
-                Self::backward_prop_bexp(lhs, tree, i * 2 + 1);
-                Self::backward_prop_bexp(rhs, tree, i * 2 + 2);
+                Self::backward_bexp(lhs, tree, left_child(i));
+                Self::backward_bexp(rhs, tree, right_child(i));
             }
             BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                tree.get_mut(&(i * 2 + 1)).unwrap().value = tree[&i].value;
-                Self::backward_prop_aexp(lhs, tree, i * 2 + 1);
+                tree.get_mut(&(left_child(i))).unwrap().value = tree[&i].value;
+                Self::backward_aexp(lhs, tree, left_child(i));
             }
             _ => (),
         };
     }
 
-    fn backward_prop_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
+    fn backward_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
         match exp {
             ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
                 let refinement = D::backward_arithmetic_operator(
-                    tree[&(i * 2 + 1)].value,
-                    tree[&(i * 2 + 2)].value,
+                    tree[&(left_child(i))].value,
+                    tree[&(right_child(i))].value,
                     tree[&i].value,
                     *operator,
                 );
 
-                tree.get_mut(&(i * 2 + 1))
+                tree.get_mut(&(left_child(i)))
                     .unwrap()
                     .backward_update(refinement[0]);
-                Self::backward_prop_aexp(lhs, tree, i * 2 + 1);
+                Self::backward_aexp(lhs, tree, left_child(i));
 
-                tree.get_mut(&(i * 2 + 2))
+                tree.get_mut(&(right_child(i)))
                     .unwrap()
                     .backward_update(refinement[1]);
-                Self::backward_prop_aexp(rhs, tree, i * 2 + 2);
+                Self::backward_aexp(rhs, tree, right_child(i));
             }
             _ => (),
         }
     }
 
-    pub fn refinement_propagation(&mut self, exp: &BooleanExp<'a>) -> (bool, HashMap<&'a str, D>) {
+    pub fn propagation(&mut self, exp: &BooleanExp<'a>) -> (bool, HashMap<&'a str, D>) {
         let mut fixed_point = false;
         let mut satisfiable = true;
         while !fixed_point && satisfiable {
             let prev = self.values.clone();
-            Self::forward_prop_bexp(exp, &mut self.values, 0);
+            Self::forward_bexp(exp, &mut self.values, 0);
 
             satisfiable = self.values[&0].value != D::bottom();
             if satisfiable {
-                Self::backward_prop_bexp(exp, &mut self.values, 0);
+                Self::backward_bexp(exp, &mut self.values, 0);
                 fixed_point = prev == self.values;
             }
         }
@@ -220,7 +229,6 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
             .filter(|node| node.var.is_some())
             .map(|node| (node.var.clone().unwrap(), node.value))
             .collect();
-
         (satisfiable, updated_vars)
     }
 }
