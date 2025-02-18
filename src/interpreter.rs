@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
@@ -9,195 +9,176 @@ use crate::{
 
 type Invariant<'a, D> = State<'a, D>;
 
-fn abstract_aexp_eval<'a, D: AbstractDomain>(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
-    match exp {
-        ArithmeticExp::Variable(var) => state.lookup(var).clone(),
-        ArithmeticExp::Integer(x) => D::constant_abstraction(*x),
-        ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
-            let lhs_value = abstract_aexp_eval(lhs, state);
-            let rhs_value = abstract_aexp_eval(rhs, state);
-            match operator {
-                Operator::Add => lhs_value + rhs_value,
-                Operator::Sub => lhs_value - rhs_value,
-                Operator::Mul => lhs_value * rhs_value,
-                Operator::Div => lhs_value / rhs_value,
+pub struct Interpreter<'a, D: AbstractDomain> {
+    program: &'a Statement<'a>,
+    widening_thresholds: HashSet<i64>,
+    invariants: HashMap<usize, Invariant<'a, D>>,
+    initial_state: State<'a, D>,
+}
+
+impl<'a, D: AbstractDomain> Interpreter<'a, D> {
+    pub fn build(
+        program: &'a Statement<'a>,
+        initial_vars: HashMap<&'a str, &str>,
+    ) -> Interpreter<'a, D> {
+        let consts = program.extract_constant();
+        let vars = initial_vars
+            .into_iter()
+            .map(|(var, value)| (var, D::try_from(value).unwrap_or(D::top())))
+            .collect();
+
+        Interpreter {
+            program,
+            widening_thresholds: consts,
+            invariants: HashMap::new(),
+            initial_state: State::initialize(program, vars),
+        }
+    }
+
+    pub fn interpret(&mut self) -> HashMap<usize, Invariant<'a, D>> {
+        let program = self.program;
+        let initial_state = self.initial_state.clone();
+        let last_state = self.abstract_statement_eval(program, &initial_state);
+        self.invariants.insert(0, last_state);
+        self.invariants.clone()
+    }
+
+    fn abstract_aexp_eval(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
+        match exp {
+            ArithmeticExp::Variable(var) => state.lookup(var).clone(),
+            ArithmeticExp::Integer(x) => D::constant_abstraction(*x),
+            ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
+                let lhs_value = Self::abstract_aexp_eval(lhs, state);
+                let rhs_value = Self::abstract_aexp_eval(rhs, state);
+                match operator {
+                    Operator::Add => lhs_value + rhs_value,
+                    Operator::Sub => lhs_value - rhs_value,
+                    Operator::Mul => lhs_value * rhs_value,
+                    Operator::Div => lhs_value / rhs_value,
+                }
             }
         }
     }
-}
 
-fn abstract_bexp_eval<'a, D: AbstractDomain>(
-    exp: &BooleanExp<'a>,
-    state: &State<'a, D>,
-) -> State<'a, D> {
-    let mut prop_algo = PropagationAlgo::build(exp, state);
+    fn abstract_bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
+        let mut prop_algo = PropagationAlgo::build(exp, state);
 
-    let (satisfiable, updated_vars) = prop_algo.propagation(exp);
+        let (satisfiable, updated_vars) = prop_algo.propagation(exp);
 
-    if !satisfiable {
-        return State::bottom();
+        if !satisfiable {
+            return State::bottom();
+        }
+
+        let mut state = state.clone();
+        updated_vars
+            .into_iter()
+            .for_each(|(var, value)| state.update(var, value));
+
+        state
     }
 
-    let mut state = state.clone();
-    updated_vars
-        .into_iter()
-        .for_each(|(var, value)| state.update(var, value));
-
-    state
-}
-
-fn abstract_statement_semantic<'a, D: AbstractDomain>(
-    statement: &Statement<'a>,
-    state: &State<'a, D>,
-    widening_thresholds: &HashSet<i64>,
-) -> (State<'a, D>, Vec<Invariant<'a, D>>) {
-    if *state == State::bottom() {
-        return (State::bottom(), vec![]);
-    }
-    match statement {
-        Statement::Skip => (state.clone(), vec![]),
-        Statement::Assignment(Assignment { var, value }) => {
-            let mut updated_state = state.clone();
-            updated_state.update(&var, abstract_aexp_eval(value, state));
-            (updated_state, vec![])
+    fn abstract_statement_eval(
+        &mut self,
+        statement: &Statement<'a>,
+        state: &State<'a, D>,
+    ) -> State<'a, D> {
+        if *state == State::bottom() {
+            return State::bottom();
         }
-        Statement::Composition { lhs, rhs } => {
-            let (state, lhs_invariants) =
-                abstract_statement_semantic(lhs, state, widening_thresholds);
-            let (state, rhs_invariants) =
-                abstract_statement_semantic(rhs, &state, widening_thresholds);
-            (state, [lhs_invariants, rhs_invariants].concat())
-        }
-        Statement::Conditional {
-            guard,
-            true_branch,
-            false_branch,
-        } => {
-            let (true_state, t) = abstract_statement_semantic(
+        match statement {
+            Statement::Skip => state.clone(),
+            Statement::Assignment(Assignment { var, value }) => {
+                let mut updated_state = state.clone();
+                updated_state.update(&var, Self::abstract_aexp_eval(value, state));
+                updated_state
+            }
+            Statement::Composition { lhs, rhs } => {
+                let state = self.abstract_statement_eval(lhs, state);
+                let state = self.abstract_statement_eval(rhs, &state);
+                state
+            }
+            Statement::Conditional {
+                guard,
                 true_branch,
-                &abstract_bexp_eval(guard, state),
-                widening_thresholds,
-            );
-
-            let (false_state, f) = abstract_statement_semantic(
                 false_branch,
-                &abstract_bexp_eval(&!*guard.clone(), state),
-                widening_thresholds,
-            );
+            } => {
+                let t = self
+                    .abstract_statement_eval(true_branch, &Self::abstract_bexp_eval(guard, state));
 
-            (true_state.union(&false_state), [t, f].concat())
-        }
-        Statement::While { guard, body } => {
-            //Sem[while b do S]R = C[!b]lim F where F(X) = X widened (R U Sem[S]C[b]X)
-            //want to compute the lim F = least fixed point starting from bottom
-            //nested loops: what about invariant?
-            //depends on outer loop state, which can vary at each iteration
-            //for sure it is upper bounded from its evaluation given the outer loop invariant as state
-            let f = |x: &State<'a, D>| -> (State<'a, D>, Vec<Invariant<'a, D>>) {
-                let (body_state, inner_invs) = abstract_statement_semantic(
-                    body,
-                    &abstract_bexp_eval(guard, x),
-                    widening_thresholds,
+                let f = self.abstract_statement_eval(
+                    false_branch,
+                    &Self::abstract_bexp_eval(&!*guard.clone(), state),
                 );
-                (
-                    x.widening(&state.union(&body_state), widening_thresholds),
-                    inner_invs,
-                )
-            };
 
-            let narrowing_refinement = |inv: State<'a, D>| {
-                let mut fixpoint = false;
-                let mut inv = inv;
-                while !fixpoint {
-                    let (k, _) = abstract_statement_semantic(
-                        body,
-                        &abstract_bexp_eval(guard, &inv),
-                        widening_thresholds,
-                    );
-                    let next = inv.narrowing(&k);
-                    dbg!(&next);
-                    fixpoint = next == inv;
-                    inv = next;
-                }
-                inv
-            };
-
-            let mut fixed_point = false;
-            let mut inv = state.clone();
-            let mut inner_loops_invs = vec![];
-            let mut iter = vec![inv.clone()];
-            while !fixed_point {
-                let (current, inner_loops_invariant) = f(&inv);
-                fixed_point = inv == current;
-                if fixed_point {
-                    inner_loops_invs = inner_loops_invariant;
-                } else {
-                    inv = current;
-                    iter.push(inv.clone());
-                }
+                t.union(&f)
             }
+            Statement::While { line, guard, body } => {
+                //Sem[while b do S]R = C[!b]lim F where F(X) = X widened (R U Sem[S]C[b]X)
+                //want to compute the lim F = least fixed point starting from bottom
+                //nested loops: what about invariant?
+                //depends on outer loop state, which can vary at each iteration
+                //for sure it is upper bounded from its evaluation given the outer loop invariant as state
 
-            inv = narrowing_refinement(inv);
+                let mut fixpoint = false;
+                let mut x = state.clone();
+                let mut iter = vec![x.clone()];
+                while !fixpoint {
+                    let body_eval =
+                        self.abstract_statement_eval(body, &Self::abstract_bexp_eval(guard, &x));
+                    let current = x.widening(&state.union(&body_eval), &self.widening_thresholds);
+                    fixpoint = x == current;
+                    x = current;
+                    iter.push(x.clone());
+                }
 
-            let post_condition = abstract_bexp_eval(&!*guard.clone(), &inv);
-            let snap = SnapShot {
-                body,
-                pre_cond: state.clone(),
-                post_cond: post_condition.clone(),
-                iter,
-            };
+                println!(
+                    "Finding loop invariant {line} using widening with thresholds {:#?}:",
+                    self.widening_thresholds
+                );
+                print_as_table(iter);
 
-            snap.pretty_print();
+                let mut narrowing_iter = vec![x.clone()];
+                fixpoint = false;
+                while !fixpoint {
+                    let k =
+                        self.abstract_statement_eval(body, &Self::abstract_bexp_eval(guard, &x));
+                    let next = x.narrowing(&k);
+                    fixpoint = next == x;
+                    x = next;
+                    narrowing_iter.push(x.clone());
+                }
 
-            inner_loops_invs.push(inv);
+                println!("Refining loop invariant {line} using narrowing:");
+                print_as_table(narrowing_iter);
 
-            (post_condition, inner_loops_invs)
+                self.invariants.insert(*line, x.clone());
+
+                let post_condition = Self::abstract_bexp_eval(&!*guard.clone(), &x);
+
+                post_condition
+            }
         }
     }
 }
-struct SnapShot<'a, 'b, D: AbstractDomain> {
-    body: &'b Statement<'a>,
-    pre_cond: State<'a, D>,
-    post_cond: State<'a, D>,
-    iter: Vec<State<'a, D>>,
-}
 
-impl<'a, 'b, D: AbstractDomain> SnapShot<'a, 'b, D> {
-    fn pretty_print(self) {
-        let format_var_iterations = |var: &'a str| -> String {
-            self.iter
-                .iter()
-                .map(|i| {
-                    let value = if i.vars().contains(var) {
-                        i.lookup(var)
-                    } else {
-                        &D::bottom()
-                    };
-                    format!("{:#?}\t", Into::<String>::into(*value))
-                })
-                .collect()
-        };
-
-        println!("Semantic of loop with body: {:#?}", self.body);
-        println!("Pre-condition: {:#?}", self.pre_cond);
-        println!("Post-condition: {:#?}", self.post_cond);
-        println!("Kleene iterations:");
-
-        self.iter[0].vars().into_iter().for_each(|var| {
-            println!("{var}: {}", format_var_iterations(var));
-        });
-
-        print!("\n\n");
+fn print_as_table<'a, D: AbstractDomain>(v: Vec<State<'a, D>>) {
+    if v.is_empty() {
+        return;
     }
-}
 
-pub fn interpreter<'a, D: AbstractDomain>(
-    program: &Statement<'a>,
-    state: &State<'a, D>,
-    widening_thresholds: &HashSet<i64>,
-) -> Vec<Invariant<'a, D>> {
-    let (last_state, mut invariants) =
-        abstract_statement_semantic(program, state, widening_thresholds);
-    invariants.insert(invariants.len(), last_state);
-    invariants
+    let vars = v[0].vars();
+    let vars = vars
+        .into_iter()
+        .map(|var| {
+            let values = v
+                .iter()
+                .map(|s| Into::<String>::into(*s.lookup(var)))
+                .reduce(|acc, e| format!("{acc}         {e}"))
+                .unwrap();
+            format!("{var} -> {}", values)
+        })
+        .reduce(|acc, e| format!("{acc}\n{e}"))
+        .unwrap();
+
+    println!("{}", vars);
 }

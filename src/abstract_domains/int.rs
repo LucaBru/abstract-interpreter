@@ -1,4 +1,5 @@
 use Int::*;
+use core::fmt;
 use std::ops::{Add, Div, Mul, Neg, Sub};
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy, Debug)]
@@ -7,6 +8,37 @@ pub enum Int {
     NegInf,
     Num(i64),
     PosInf,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct BadInt<'a>(&'a str);
+
+impl<'a> fmt::Display for BadInt<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid conversion: {}: String -> Int", self.0)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Int {
+    type Error = BadInt<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        match value {
+            "inf" => Ok(Int::PosInf),
+            "-inf" => Ok(Int::NegInf),
+            x if x.parse::<i64>().is_ok() => Ok(Int::Num(x.parse::<i64>().unwrap())),
+            _ => Err(BadInt(value)),
+        }
+    }
+}
+
+impl Into<String> for Int {
+    fn into(self) -> String {
+        match self {
+            Int::PosInf => "inf".to_string(),
+            Int::NegInf => "-inf".to_string(),
+            Int::Num(x) => format!("{x}"),
+        }
+    }
 }
 
 impl Neg for Int {

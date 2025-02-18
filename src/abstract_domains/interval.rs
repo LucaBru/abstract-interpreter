@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{
     cmp::{Ordering, max, min},
     collections::HashSet,
@@ -271,7 +272,7 @@ impl AbstractDomain for Interval {
             _ => {
                 let mut t = Int::NegInf;
                 thresholds.iter().for_each(|x| {
-                    if *x > t && *x < self.low {
+                    if *x > t && *x <= rhs.low {
                         t = *x
                     }
                 });
@@ -284,14 +285,14 @@ impl AbstractDomain for Interval {
             _ => {
                 let mut t = Int::PosInf;
                 thresholds.iter().for_each(|x| {
-                    if *x < t && *x > self.upper {
+                    if *x < t && *x >= rhs.upper {
                         t = *x
                     }
                 });
                 t
             }
         };
-
+        dbg!(self, rhs, Self::normal_form(low, upper));
         Self::normal_form(low, upper)
     }
 
@@ -307,28 +308,43 @@ impl AbstractDomain for Interval {
             upper = d;
         }
 
-        dbg!(self, rhs, low, upper);
         Interval { low, upper }
     }
 }
 
-impl Into<String> for Interval {
+#[derive(Debug, Clone, Copy)]
+pub struct BadInterval<'a>(&'a str);
+
+impl<'a> fmt::Display for BadInterval<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "invalid conversion {} -> Interval", self.0)
+    }
+}
+
+impl<'a> TryFrom<&'a str> for Interval {
+    type Error = BadInterval<'a>;
+    fn try_from(value: &'a str) -> Result<Self, Self::Error> {
+        let trimmed = value.trim().trim_start_matches('[').trim_end_matches(']');
+        let parts: Vec<_> = trimmed.split(',').map(Int::try_from).collect();
+
+        if parts.len() != 2 {
+            return Err(BadInterval(value));
+        }
+
+        if parts[0].is_ok_and(|x| x != Int::PosInf) && parts[1].is_ok_and(|x| x != Int::NegInf) {
+            return Ok(Interval {
+                low: parts[0].unwrap(),
+                upper: parts[1].unwrap(),
+            });
+        }
+
+        Err(BadInterval(value))
+    }
+}
+
+impl<'a> Into<String> for Interval {
     fn into(self) -> String {
-        let Interval { low, upper } = self;
-
-        let low = match low {
-            Int::NegInf => "-inf".to_string(),
-            Int::Num(x) => format!("{x}").to_string(),
-            _ => "None".to_string(),
-        };
-
-        let upper = match upper {
-            Int::PosInf => "inf".to_string(),
-            Int::Num(x) => format!("{x}").to_string(),
-            _ => "None".to_string(),
-        };
-
-        format!("[{low},{upper}]").to_string()
+        format! {"[{},{}]", Into::<String>::into(self.low), Into::<String>::into(self.upper)}
     }
 }
 

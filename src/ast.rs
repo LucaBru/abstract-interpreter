@@ -17,6 +17,7 @@ pub enum Statement<'a> {
         false_branch: Box<Statement<'a>>,
     },
     While {
+        line: usize,
         guard: Box<BooleanExp<'a>>,
         body: Box<Statement<'a>>,
     },
@@ -37,7 +38,11 @@ impl<'a> Statement<'a> {
                 vars.extend(Self::extract_vars(&rhs));
                 vars
             }
-            Statement::While { guard: _, body } => Self::extract_vars(&body),
+            Statement::While {
+                line: _,
+                guard: _,
+                body,
+            } => Self::extract_vars(&body),
         }
     }
 
@@ -60,7 +65,11 @@ impl<'a> Statement<'a> {
                 .into_iter()
                 .chain(rhs.extract_constant())
                 .collect(),
-            Statement::While { guard, body } => guard
+            Statement::While {
+                line: _,
+                guard,
+                body,
+            } => guard
                 .extract_constant()
                 .into_iter()
                 .chain(body.extract_constant())

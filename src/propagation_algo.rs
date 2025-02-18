@@ -129,7 +129,28 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                 Self::forward_aexp(lhs, tree, left_child(i));
                 let slice = match operator {
                     ConditionOperator::Equal => D::constant_abstraction(0),
-                    ConditionOperator::NotEqual => D::top(),
+                    /*
+                    ----------- 0 -------------
+                            [       ]
+                                [   ]
+                        [   ]
+
+                    Given intv x
+                    1. intersect x with > 0
+                    2. intersect x with < 0
+                    3. 1. U 2.
+                    */
+                    ConditionOperator::NotEqual => {
+                        let v = &tree[&(left_child(i))].value;
+                        [
+                            D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1)),
+                            D::interval_abstraction(IntervalBound::Num(1), IntervalBound::PosInf),
+                        ]
+                        .map(|intv| intv.intersection_abstraction(v))
+                        .into_iter()
+                        .reduce(|acc, e| acc.union_abstraction(&e))
+                        .unwrap()
+                    }
                     ConditionOperator::StrictlyLess => {
                         D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1))
                     }

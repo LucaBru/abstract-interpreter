@@ -17,11 +17,12 @@ pub trait AbstractDomain:
     + Clone
     + Copy
     + Debug
-    + Into<String>
     + Add<Output = Self>
     + Sub<Output = Self>
     + Mul<Output = Self>
     + Div<Output = Self>
+    + for<'a> TryFrom<&'a str>
+    + Into<String>
     + Sized
 {
     fn top() -> Self;
