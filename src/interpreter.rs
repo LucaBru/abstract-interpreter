@@ -19,19 +19,27 @@ pub struct Interpreter<'a, D: AbstractDomain> {
 impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     pub fn build(
         program: &'a Statement<'a>,
-        initial_vars: HashMap<&'a str, &str>,
+        given_vars: HashMap<&'a str, &str>,
     ) -> Interpreter<'a, D> {
         let consts = program.extract_constant();
-        let vars = initial_vars
+
+        let vars = program
+            .extract_vars()
             .into_iter()
-            .map(|(var, value)| (var, D::try_from(value).unwrap_or(D::top())))
-            .collect();
+            .map(|var| {
+                let mut value = D::top();
+                if given_vars.contains_key(var) {
+                    value = D::try_from(given_vars[var]).unwrap_or(D::top());
+                }
+                (var, value)
+            })
+            .collect::<HashMap<&str, D>>();
 
         Interpreter {
             program,
             widening_thresholds: consts,
             invariants: HashMap::new(),
-            initial_state: State::initialize(program, vars),
+            initial_state: State::new(vars),
         }
     }
 

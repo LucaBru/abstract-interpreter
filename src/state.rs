@@ -8,13 +8,7 @@ pub struct State<'a, D: AbstractDomain> {
 }
 
 impl<'a, 'b, D: AbstractDomain> State<'a, D> {
-    pub fn initialize(program: &'a Statement, vars_initial_values: HashMap<&'b str, D>) -> Self {
-        let vars = program.extract_vars();
-        let vars = vars
-            .clone()
-            .into_iter()
-            .map(|v| (v, vars_initial_values.get(v).unwrap_or(&D::top()).clone()))
-            .collect();
+    pub fn new(vars: HashMap<&'a str, D>) -> Self {
         State { vars }
     }
 

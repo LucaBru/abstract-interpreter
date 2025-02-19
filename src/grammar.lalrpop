@@ -25,7 +25,6 @@ extern {
     "(" => Token::LParen,
     ")" => Token::RParen,
     ":=" => Token::Assign,
-
     ";" => Token::Semicolon,
     "+" => Token::OperatorAdd,
     "-" => Token::OperatorSub,

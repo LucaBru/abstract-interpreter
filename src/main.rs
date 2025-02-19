@@ -1,6 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem::replace};
 
-use abstract_domains::interval::Interval;
+use abstract_domains::{
+    int::Int,
+    interval::{Interval, M, N},
+};
 use grammar::StatementParser;
 use interpreter::Interpreter;
 use lalrpop_util::lalrpop_mod;
@@ -37,23 +40,37 @@ lalrpop_mod!(grammar);
     None // This should not happen if the input is valid.
 }
  */
+
 fn main() {
-    /*         {
+    {
         let mut m_lock = M.write().unwrap();
-        *m_lock = Int::PosInf;
+        *m_lock = Int::Num(-100);
 
         let mut n_lock = N.write().unwrap();
-        *n_lock = Int::NegInf;
-    } */
+        *n_lock = Int::Num(200);
+    }
     let source_code = std::fs::read_to_string("myscript.toy").unwrap();
     let lexer = Lexer::new(&source_code);
     let program = StatementParser::new().parse(&source_code, lexer).unwrap();
 
-    println!("{:?}", program);
-    //println!("{}", get_line_number(&source_code, 18).unwrap());
+    let assumptions = source_code
+        .lines()
+        .filter(|line| line.contains("assume") && !line.contains("#"))
+        .map(|line| line.trim().replace("assume", "").to_string())
+        .collect::<Vec<String>>()
+        .join("; ");
 
-    let initial_vars = HashMap::new();
-    let mut interpreter: Interpreter<'_, Interval> = Interpreter::build(&program, initial_vars);
+    let given_vars = assumptions
+        .split(';')
+        .map(|assignment| {
+            let mut parts = assignment.split(":=");
+            (parts.next().unwrap(), parts.next().unwrap_or_default())
+        })
+        .collect::<HashMap<&str, &str>>();
+
+    dbg!(&given_vars);
+
+    let mut interpreter: Interpreter<'_, Interval> = Interpreter::build(&program, given_vars);
     let invariants = interpreter.interpret();
 
     println!("{:#?}", invariants)

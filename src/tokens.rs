@@ -1,5 +1,5 @@
 use logos::Logos;
-use std::fmt; // to implement the Display trait later
+use std::fmt;
 use std::num::ParseIntError;
 use std::str::ParseBoolError;
 
@@ -24,7 +24,7 @@ impl From<ParseBoolError> for LexicalError {
 }
 
 #[derive(Logos, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\n\f]+", skip r"#.*\n?", error = LexicalError)]
+#[logos(skip r"[ \t\n\f]+", skip r"assume.*\n?", skip r"#.*\n?", error = LexicalError)]
 pub enum Token<'input> {
     #[regex("[_a-zA-Z][_0-9a-zA-Z]*", |lex| lex.slice())]
     Identifier(&'input str),

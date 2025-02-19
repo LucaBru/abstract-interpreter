@@ -6,10 +6,7 @@ use std::{
     sync::RwLock,
 };
 
-use super::{
-    abstract_domain::{AbstractDomain, IntervalBound},
-    int::Int,
-};
+use super::{abstract_domain::{AbstractDomain, IntervalBound}, int::Int};
 
 pub static M: RwLock<Int> = RwLock::new(Int::NegInf);
 pub static N: RwLock<Int> = RwLock::new(Int::PosInf);
@@ -266,6 +263,13 @@ impl AbstractDomain for Interval {
     }
 
     fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self {
+        let m = *M.read().unwrap();
+        let n = *N.read().unwrap();
+
+        if m > n || m != Int::NegInf && n != Int::PosInf {
+            return self.union_abstraction(rhs);
+        }
+
         let thresholds: Vec<Int> = thresholds.into_iter().map(|t| Int::Num(*t)).collect();
         let low = match self.low <= rhs.low {
             true => self.low,

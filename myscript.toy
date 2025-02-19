@@ -1,5 +1,3 @@
-x := 1;
-while x < 100 do {
-  x := x + 1
-}
-
+assume x := [-inf,1];
+#recall default behavior is the interval passed cannot be parsed into the abstract domain, then the abstract value is top()
+skip; x := x +1
