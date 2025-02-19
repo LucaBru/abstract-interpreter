@@ -1,10 +1,21 @@
+use core::fmt;
 use std::collections::{HashMap, HashSet};
 
-use crate::{abstract_domains::abstract_domain::AbstractDomain, ast::Statement};
+use crate::abstract_domains::abstract_domain::AbstractDomain;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct State<'a, D: AbstractDomain> {
     vars: HashMap<&'a str, D>,
+}
+
+impl<'a, D: AbstractDomain> fmt::Display for State<'a, D> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let _ = write!(f, "{{");
+        self.vars.iter().for_each(|(var, value)| {
+            let _ = write!(f, "{var} := {}, ", Into::<String>::into(*value));
+        });
+        write!(f, "}}")
+    }
 }
 
 impl<'a, 'b, D: AbstractDomain> State<'a, D> {

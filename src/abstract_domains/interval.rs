@@ -232,16 +232,20 @@ impl Div for Interval {
 impl AbstractDomain for Interval {
     fn init() {
         let mut m_lock = M.write().unwrap();
-        *m_lock = match env::var("@M") {
+        let m = match env::var("M") {
             Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::NegInf),
             Err(_) => Int::NegInf,
         };
+        dbg!(m);
+        *m_lock = m;
 
         let mut n_lock = N.write().unwrap();
-        *n_lock = match env::var("@N") {
+        let n = match env::var("N") {
             Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::PosInf),
             Err(_) => Int::PosInf,
         };
+        dbg!(n);
+        *n_lock = n;
     }
 
     fn bottom() -> Self {
@@ -314,7 +318,6 @@ impl AbstractDomain for Interval {
                 t
             }
         };
-        dbg!(self, rhs, Self::normal_form(low, upper));
         Self::normal_form(low, upper)
     }
 

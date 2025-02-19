@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
@@ -7,12 +7,12 @@ use crate::{
     state::State,
 };
 
-type Invariant<'a, D> = State<'a, D>;
+pub type Invariant<'a, D> = State<'a, D>;
 
 pub struct Interpreter<'a, D: AbstractDomain> {
     program: &'a Statement<'a>,
     widening_thresholds: HashSet<i64>,
-    invariants: HashMap<usize, Invariant<'a, D>>,
+    invariants: BTreeMap<usize, Invariant<'a, D>>,
     initial_state: State<'a, D>,
 }
 
@@ -37,19 +37,22 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
             })
             .collect::<HashMap<&str, D>>();
 
+        let initial_state = State::new(vars);
+        dbg!(&initial_state);
+
         Interpreter {
             program,
             widening_thresholds: consts,
-            invariants: HashMap::new(),
-            initial_state: State::new(vars),
+            invariants: BTreeMap::new(),
+            initial_state,
         }
     }
 
-    pub fn interpret(&mut self) -> HashMap<usize, Invariant<'a, D>> {
+    pub fn interpret(&mut self) -> BTreeMap<usize, Invariant<'a, D>> {
         let program = self.program;
         let initial_state = self.initial_state.clone();
         let last_state = self.abstract_statement_eval(program, &initial_state);
-        self.invariants.insert(0, last_state);
+        self.invariants.insert(usize::MAX, last_state);
         self.invariants.clone()
     }
 
@@ -141,10 +144,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                     iter.push(x.clone());
                 }
 
-                println!(
-                    "Finding loop invariant {line} using widening with thresholds {:#?}:",
-                    self.widening_thresholds
-                );
+                println!("Seeking loop invariant");
                 print_as_table(iter);
 
                 let mut narrowing_iter = vec![x.clone()];
@@ -158,7 +158,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                     narrowing_iter.push(x.clone());
                 }
 
-                println!("Refining loop invariant {line} using narrowing:");
+                println!("Refine loop invariant with narrowing");
                 print_as_table(narrowing_iter);
 
                 self.invariants.insert(*line, x.clone());
@@ -190,5 +190,5 @@ fn print_as_table<'a, D: AbstractDomain>(v: Vec<State<'a, D>>) {
         .reduce(|acc, e| format!("{acc}\n{e}"))
         .unwrap();
 
-    println!("{}", vars);
+    dbg!(vars);
 }
