@@ -21,6 +21,8 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         program: &'a Statement<'a>,
         given_vars: HashMap<&'a str, &str>,
     ) -> Interpreter<'a, D> {
+        D::init();
+
         let consts = program.extract_constant();
 
         let vars = program

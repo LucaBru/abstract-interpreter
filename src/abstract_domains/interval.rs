@@ -2,11 +2,15 @@ use core::fmt;
 use std::{
     cmp::{Ordering, max, min},
     collections::HashSet,
+    env,
     ops::{Add, Div, Mul, Sub},
     sync::RwLock,
 };
 
-use super::{abstract_domain::{AbstractDomain, IntervalBound}, int::Int};
+use super::{
+    abstract_domain::{AbstractDomain, IntervalBound},
+    int::Int,
+};
 
 pub static M: RwLock<Int> = RwLock::new(Int::NegInf);
 pub static N: RwLock<Int> = RwLock::new(Int::PosInf);
@@ -226,6 +230,20 @@ impl Div for Interval {
 }
 
 impl AbstractDomain for Interval {
+    fn init() {
+        let mut m_lock = M.write().unwrap();
+        *m_lock = match env::var("@M") {
+            Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::NegInf),
+            Err(_) => Int::NegInf,
+        };
+
+        let mut n_lock = N.write().unwrap();
+        *n_lock = match env::var("@N") {
+            Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::PosInf),
+            Err(_) => Int::PosInf,
+        };
+    }
+
     fn bottom() -> Self {
         BOTTOM
     }

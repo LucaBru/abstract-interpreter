@@ -25,6 +25,8 @@ pub trait AbstractDomain:
     + Into<String>
     + Sized
 {
+    //function called before building the interpreter to allow to abstract domain to initialize some domain specific values
+    fn init() {}
     fn top() -> Self;
     fn bottom() -> Self;
     fn union_abstraction(&self, other: &Self) -> Self;
