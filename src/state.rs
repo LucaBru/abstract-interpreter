@@ -10,9 +10,9 @@ pub struct State<'a, D: AbstractDomain> {
 
 impl<'a, D: AbstractDomain> fmt::Display for State<'a, D> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let _ = write!(f, "{{");
+        let _ = write!(f, "{{ ");
         self.vars.iter().for_each(|(var, value)| {
-            let _ = write!(f, "{var} := {}, ", Into::<String>::into(*value));
+            let _ = write!(f, "{var} := {} ", Into::<String>::into(*value));
         });
         write!(f, "}}")
     }

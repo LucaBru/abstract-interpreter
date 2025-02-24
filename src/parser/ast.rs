@@ -3,6 +3,12 @@ use std::{
     ops::{Neg, Not},
 };
 
+#[derive(Hash, PartialOrd, Ord, Eq, Debug, Clone, PartialEq)]
+pub struct Position {
+    pub line: usize,
+    pub clm: usize,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement<'a> {
     Assignment(Assignment<'a>),
@@ -17,7 +23,7 @@ pub enum Statement<'a> {
         false_branch: Box<Statement<'a>>,
     },
     While {
-        line: usize,
+        line: Position,
         guard: Box<BooleanExp<'a>>,
         body: Box<Statement<'a>>,
     },

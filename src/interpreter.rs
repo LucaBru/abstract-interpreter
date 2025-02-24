@@ -1,19 +1,25 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, HashMap, HashSet},
+    env, usize,
+};
 
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
-    ast::{ArithmeticExp, Assignment, BooleanExp, Operator, Statement},
+    parser::ast::{ArithmeticExp, Assignment, BooleanExp, Operator, Position, Statement},
     propagation_algo::PropagationAlgo,
     state::State,
 };
 
 pub type Invariant<'a, D> = State<'a, D>;
 
+pub type ProgramInvariants<'a, D> = BTreeMap<Position, Invariant<'a, D>>;
+
 pub struct Interpreter<'a, D: AbstractDomain> {
     program: &'a Statement<'a>,
-    widening_thresholds: HashSet<i64>,
-    invariants: BTreeMap<usize, Invariant<'a, D>>,
     initial_state: State<'a, D>,
+    widening_thresholds: HashSet<i64>,
+    narrowing_steps: usize,
+    invariants: ProgramInvariants<'a, D>,
 }
 
 impl<'a, D: AbstractDomain> Interpreter<'a, D> {
@@ -22,6 +28,13 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         given_vars: HashMap<&'a str, &str>,
     ) -> Interpreter<'a, D> {
         D::init();
+
+        let narrowing_steps = match env::var("NARROWING_STEPS") {
+            Ok(steps) => steps.parse().unwrap_or(0_usize),
+            _ => 0,
+        };
+
+        dbg!(narrowing_steps);
 
         let consts = program.extract_constant();
 
@@ -45,24 +58,31 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
             widening_thresholds: consts,
             invariants: BTreeMap::new(),
             initial_state,
+            narrowing_steps,
         }
     }
 
-    pub fn interpret(&mut self) -> BTreeMap<usize, Invariant<'a, D>> {
+    pub fn interpret(&mut self) -> ProgramInvariants<'a, D> {
         let program = self.program;
         let initial_state = self.initial_state.clone();
-        let last_state = self.abstract_statement_eval(program, &initial_state);
-        self.invariants.insert(usize::MAX, last_state);
+        let last_state = self.statement_eval(program, &initial_state);
+        self.invariants.insert(
+            Position {
+                line: usize::MAX,
+                clm: usize::MAX,
+            },
+            last_state,
+        );
         self.invariants.clone()
     }
 
-    fn abstract_aexp_eval(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
+    fn aexp_eval(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
         match exp {
             ArithmeticExp::Variable(var) => state.lookup(var).clone(),
             ArithmeticExp::Integer(x) => D::constant_abstraction(*x),
             ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
-                let lhs_value = Self::abstract_aexp_eval(lhs, state);
-                let rhs_value = Self::abstract_aexp_eval(rhs, state);
+                let lhs_value = Self::aexp_eval(lhs, state);
+                let rhs_value = Self::aexp_eval(rhs, state);
                 match operator {
                     Operator::Add => lhs_value + rhs_value,
                     Operator::Sub => lhs_value - rhs_value,
@@ -73,7 +93,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         }
     }
 
-    fn abstract_bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
+    fn bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
         let mut prop_algo = PropagationAlgo::build(exp, state);
 
         let (satisfiable, updated_vars) = prop_algo.propagation(exp);
@@ -90,24 +110,20 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         state
     }
 
-    fn abstract_statement_eval(
-        &mut self,
-        statement: &Statement<'a>,
-        state: &State<'a, D>,
-    ) -> State<'a, D> {
+    fn statement_eval(&mut self, stmt: &Statement<'a>, state: &State<'a, D>) -> State<'a, D> {
         if *state == State::bottom() {
             return State::bottom();
         }
-        match statement {
+        match stmt {
             Statement::Skip => state.clone(),
             Statement::Assignment(Assignment { var, value }) => {
                 let mut updated_state = state.clone();
-                updated_state.update(&var, Self::abstract_aexp_eval(value, state));
+                updated_state.update(&var, Self::aexp_eval(value, state));
                 updated_state
             }
             Statement::Composition { lhs, rhs } => {
-                let state = self.abstract_statement_eval(lhs, state);
-                let state = self.abstract_statement_eval(rhs, &state);
+                let state = self.statement_eval(lhs, state);
+                let state = self.statement_eval(rhs, &state);
                 state
             }
             Statement::Conditional {
@@ -115,13 +131,10 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 true_branch,
                 false_branch,
             } => {
-                let t = self
-                    .abstract_statement_eval(true_branch, &Self::abstract_bexp_eval(guard, state));
+                let t = self.statement_eval(true_branch, &Self::bexp_eval(guard, state));
 
-                let f = self.abstract_statement_eval(
-                    false_branch,
-                    &Self::abstract_bexp_eval(&!*guard.clone(), state),
-                );
+                let f =
+                    self.statement_eval(false_branch, &Self::bexp_eval(&!*guard.clone(), state));
 
                 t.union(&f)
             }
@@ -134,44 +147,39 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
 
                 let mut fixpoint = false;
                 let mut x = state.clone();
-                let mut iter = vec![x.clone()];
+                let mut iter = vec![];
                 while !fixpoint {
-                    let body_eval =
-                        self.abstract_statement_eval(body, &Self::abstract_bexp_eval(guard, &x));
+                    let body_eval = self.statement_eval(body, &Self::bexp_eval(guard, &x));
                     let current = x.widening(&state.union(&body_eval), &self.widening_thresholds);
                     fixpoint = x == current;
+                    iter.push(x);
                     x = current;
-                    iter.push(x.clone());
                 }
-
                 println!("Seeking loop invariant");
-                print_as_table(iter);
+                dbg_iterations(&iter);
 
-                let mut narrowing_iter = vec![x.clone()];
+                let mut narrowing_iter = vec![];
+                let steps = 0;
                 fixpoint = false;
-                while !fixpoint {
-                    let k =
-                        self.abstract_statement_eval(body, &Self::abstract_bexp_eval(guard, &x));
+                while !fixpoint && steps < self.narrowing_steps {
+                    let k = self.statement_eval(body, &Self::bexp_eval(guard, &x));
                     let next = x.narrowing(&k);
                     fixpoint = next == x;
+                    narrowing_iter.push(x);
                     x = next;
-                    narrowing_iter.push(x.clone());
                 }
-
                 println!("Refine loop invariant with narrowing");
-                print_as_table(narrowing_iter);
+                dbg_iterations(&narrowing_iter);
 
-                self.invariants.insert(*line, x.clone());
+                self.invariants.insert(line.clone(), x.clone());
 
-                let post_condition = Self::abstract_bexp_eval(&!*guard.clone(), &x);
-
-                post_condition
+                Self::bexp_eval(&!*guard.clone(), &x)
             }
         }
     }
 }
 
-fn print_as_table<'a, D: AbstractDomain>(v: Vec<State<'a, D>>) {
+fn dbg_iterations<'a, D: AbstractDomain>(v: &Vec<State<'a, D>>) {
     if v.is_empty() {
         return;
     }
@@ -183,12 +191,12 @@ fn print_as_table<'a, D: AbstractDomain>(v: Vec<State<'a, D>>) {
             let values = v
                 .iter()
                 .map(|s| Into::<String>::into(*s.lookup(var)))
-                .reduce(|acc, e| format!("{acc}         {e}"))
+                .reduce(|acc, e| format!("{acc}\t{e}"))
                 .unwrap();
             format!("{var} -> {}", values)
         })
         .reduce(|acc, e| format!("{acc}\n{e}"))
         .unwrap();
 
-    dbg!(vars);
+    println!("{vars}");
 }

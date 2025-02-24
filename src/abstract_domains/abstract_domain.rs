@@ -4,7 +4,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
 };
 
-use crate::ast::Operator;
+use crate::parser::ast::Operator;
 
 pub enum IntervalBound {
     NegInf,
@@ -33,8 +33,12 @@ pub trait AbstractDomain:
     fn intersection_abstraction(&self, other: &Self) -> Self;
     fn constant_abstraction(c: i64) -> Self;
     fn interval_abstraction(low: IntervalBound, upper: IntervalBound) -> Self;
-    fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self;
-    fn narrowing(&self, rhs: &Self) -> Self;
+    fn widening(&self, rhs: &Self, _thresholds: &HashSet<i64>) -> Self {
+        self.union_abstraction(rhs)
+    }
+    fn narrowing(&self, rhs: &Self) -> Self {
+        self.intersection_abstraction(rhs)
+    }
 
     fn backward_arithmetic_operator(
         lhs: Self,

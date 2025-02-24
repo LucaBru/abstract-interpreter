@@ -1,6 +1,6 @@
 
-use crate::tokens::{Token, LexicalError};
-use crate::ast;
+use crate::parser::tokens::{Token, LexicalError};
+use crate::parser::ast;
 use std::ops::Not;
 
 grammar<'input>(input: &'input str);
@@ -17,7 +17,7 @@ extern {
     "if" => Token::If,
     "then" => Token::Then,
     "else" => Token::Else,
-    "while" => Token::While,
+    "while" => Token::While(<ast::Position>),
     "do" => Token::Do,
     "skip" => Token::Skip,
     "{" => Token::LCurlyBracket,
@@ -33,7 +33,8 @@ extern {
     "=" => Token::Equal,
     "<" => Token::StrictlyLess,
     "&" => Token::And,
-    "!" => Token::Not
+    "!" => Token::Not,
+    "\n" => Token::Newline
   }
 }
 
@@ -49,7 +50,7 @@ pub Statement: Box<ast::Statement<'input>> = {
       false_branch
     })
   },
-  <line: @L> "while" <guard: BooleanExp> "do" <body: StatementTerm> => {
+  <line:"while"> <guard: BooleanExp> "do" <body: StatementTerm> => {
     Box::new(ast::Statement::While{
       line,
       guard,
@@ -160,3 +161,4 @@ pub Term: Box<ast::ArithmeticExp<'input>> = {
   },
   "(" <ArithmeticExp> ")",
 }
+

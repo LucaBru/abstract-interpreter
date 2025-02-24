@@ -2,7 +2,7 @@ use std::{collections::HashMap, usize};
 
 use crate::{
     abstract_domains::abstract_domain::{AbstractDomain, IntervalBound},
-    ast::{ArithmeticCondition, ArithmeticExp, BooleanExp, ConditionOperator, Operator},
+    parser::ast::{ArithmeticCondition, ArithmeticExp, BooleanExp, ConditionOperator, Operator},
     state::State,
 };
 

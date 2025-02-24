@@ -1,7 +1,9 @@
-use logos::Logos;
+use logos::{Lexer, Logos, Skip};
 use std::fmt;
 use std::num::ParseIntError;
 use std::str::ParseBoolError;
+
+use super::ast::Position;
 
 #[derive(Default, Debug, Clone, PartialEq)]
 pub enum LexicalError {
@@ -23,8 +25,22 @@ impl From<ParseBoolError> for LexicalError {
     }
 }
 
+fn newline_callback<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Skip {
+    lex.extras.0 += 1;
+    lex.extras.1 = lex.span().end;
+    Skip
+}
+
+fn get_while_token_pos<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Position {
+    Position {
+        line: lex.extras.0,
+        clm: lex.span().start - lex.extras.1,
+    }
+}
+
 #[derive(Logos, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\n\f]+", skip r"assume.*\n?", skip r"#.*\n?", error = LexicalError)]
+#[logos(skip r"[ \t\f]+", skip r"assume.*\n?", skip r"#.*\n?", error = LexicalError)]
+#[logos(extras=(usize, usize))]
 pub enum Token<'input> {
     #[regex("[_a-zA-Z][_0-9a-zA-Z]*", |lex| lex.slice())]
     Identifier(&'input str),
@@ -36,8 +52,8 @@ pub enum Token<'input> {
     Then,
     #[token("else")]
     Else,
-    #[token("while")]
-    While,
+    #[token("while", get_while_token_pos)]
+    While(Position),
     #[token("do")]
     Do,
     #[token("skip")]
@@ -76,6 +92,10 @@ pub enum Token<'input> {
     Not,
     #[token("&")]
     And,
+
+    #[regex(r"\n", newline_callback)]
+    Newline,
+
     Error,
 }
 
