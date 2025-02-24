@@ -1,3 +1,4 @@
+assume y:=[1,1]
 x := 1;
 y := 0;
 while x < 100 do {

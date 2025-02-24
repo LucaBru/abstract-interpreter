@@ -39,7 +39,7 @@ fn get_while_token_pos<'a>(lex: &mut Lexer<'a, Token<'a>>) -> Position {
 }
 
 #[derive(Logos, Clone, Debug, PartialEq)]
-#[logos(skip r"[ \t\f]+", skip r"assume.*\n?", skip r"#.*\n?", error = LexicalError)]
+#[logos(skip r"[ \t\f]+", skip r"assume.*[^\n]", skip r"#.*\n?", error = LexicalError)]
 #[logos(extras=(usize, usize))]
 pub enum Token<'input> {
     #[regex("[_a-zA-Z][_0-9a-zA-Z]*", |lex| lex.slice())]
