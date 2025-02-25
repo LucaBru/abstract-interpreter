@@ -22,7 +22,7 @@ impl<'a> fmt::Display for BadInt<'a> {
 impl<'a> TryFrom<&'a str> for Int {
     type Error = BadInt<'a>;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
-        match value {
+        match value.trim() {
             "inf" => Ok(Int::PosInf),
             "-inf" => Ok(Int::NegInf),
             x if x.parse::<i64>().is_ok() => Ok(Int::Num(x.parse::<i64>().unwrap())),

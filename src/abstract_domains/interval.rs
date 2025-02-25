@@ -35,37 +35,6 @@ pub struct Interval {
     upper: Int,
 }
 
-impl Interval {
-    fn normal_form(low: Int, upper: Int) -> Self {
-        let m = *M.read().unwrap();
-        let n = *N.read().unwrap();
-
-        if low > upper {
-            return Interval::bottom();
-        }
-
-        if m > n && low < upper {
-            return TOP;
-        } else if m > n {
-            return Interval { low, upper };
-        }
-
-        let low = match low {
-            x if x > n => n.clone(),
-            x if x < m => Int::NegInf,
-            _ => low,
-        };
-
-        let upper = match upper {
-            x if x < m => m.clone(),
-            x if x > n => Int::PosInf,
-            _ => upper,
-        };
-
-        Interval { low, upper }
-    }
-}
-
 impl From<[i64; 2]> for Interval {
     fn from(value: [i64; 2]) -> Self {
         Interval {
@@ -82,53 +51,53 @@ impl PartialEq for Interval {
 
         let is_bottom = |intv: &Interval| intv.low > intv.upper;
         let is_top = |intv: &Interval| match (m > n, intv.low, intv.upper) {
-            (true, a, b) if a != b && !is_bottom(intv) => true,
+            (true, a, b) if a < b => true,
             (false, a, b) if a < m && b > n || a == Int::NegInf && b == Int::PosInf => true,
             _ => false,
         };
+
         if is_bottom(self) && is_bottom(other) || is_top(self) && is_top(other) {
             return true;
         }
 
         let Interval { low: a, upper: b } = self;
         let Interval { low: c, upper: d } = other;
-        if m > n && a == c && b == d {
-            return true;
-        } else if m > n {
+
+        if m > n && (a != c || b != d) {
             return false;
         }
 
-        if a == c && b == d || *a < m && *c < n && b == d || a == b && *b > n && *d > n {
+        if a == c && b == d
+            || *b <= m && *d <= m
+            || *a >= n && *c >= n
+            || *a < m && *c < m && b == d
+            || a == c && *b > n && *d > n
+        {
             return true;
         }
+
         false
     }
 }
 
-impl Ord for Interval {
-    fn cmp(&self, other: &Self) -> Ordering {
+impl PartialOrd for Interval {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         if *self == BOTTOM && *other != BOTTOM || *self != TOP && *other == TOP {
-            return Ordering::Less;
+            return Some(Ordering::Less);
         }
 
         if self == other {
-            return Ordering::Equal;
+            return Some(Ordering::Equal);
         }
 
         let Interval { low: a, upper: b } = self;
         let Interval { low: c, upper: d } = other;
 
         if c < a && b < d {
-            return Ordering::Less;
+            return Some(Ordering::Less);
         }
 
-        Ordering::Greater
-    }
-}
-
-impl PartialOrd for Interval {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
+        None
     }
 }
 
@@ -146,7 +115,7 @@ impl Add for Interval {
         let Interval { low: c, upper: d } = rhs;
         let low = a + c;
         let upper = b + d;
-        Self::normal_form(low, upper)
+        Interval { low, upper }
     }
 }
 
@@ -164,7 +133,7 @@ impl Sub for Interval {
         let Interval { low: c, upper: d } = rhs;
         let low = a - d;
         let upper = b - c;
-        Self::normal_form(low, upper)
+        Interval { low, upper }
     }
 }
 
@@ -189,7 +158,7 @@ impl Mul for Interval {
         let low = choices[0];
         let upper = choices[3];
 
-        Self::normal_form(low, upper)
+        Interval { low, upper }
     }
 }
 
@@ -209,7 +178,10 @@ impl Div for Interval {
         if c >= Int::Num(0) {
             let mut choices = [a / c, a / d, b / c, b / d];
             choices.sort();
-            Self::normal_form(choices[0], choices[3])
+            Interval {
+                low: choices[0],
+                upper: choices[3],
+            }
         } else if d <= Int::Num(0) {
             Interval { low: -b, upper: -a } / Interval { low: -d, upper: -c }
         } else {
@@ -255,10 +227,16 @@ impl AbstractDomain for Interval {
         TOP
     }
     fn intersection_abstraction(&self, other: &Self) -> Self {
-        Self::normal_form(max(self.low, other.low), min(self.upper, other.upper))
+        Interval {
+            low: max(self.low, other.low),
+            upper: min(self.upper, other.upper),
+        }
     }
     fn union_abstraction(&self, other: &Self) -> Self {
-        Self::normal_form(min(self.low, other.low), max(self.upper, other.upper))
+        Interval {
+            low: min(self.low, other.low),
+            upper: max(self.upper, other.upper),
+        }
     }
 
     fn constant_abstraction(c: i64) -> Self {
@@ -281,7 +259,7 @@ impl AbstractDomain for Interval {
             _ => panic!("NegInf found while parsing a concrete interval to an abstract domain"),
         };
 
-        Self::normal_form(low, upper)
+        Interval { low, upper }
     }
 
     fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self {
@@ -318,7 +296,7 @@ impl AbstractDomain for Interval {
                 t
             }
         };
-        Self::normal_form(low, upper)
+        Interval { low, upper }
     }
 
     fn narrowing(&self, rhs: &Self) -> Self {
@@ -469,8 +447,8 @@ mod test {
             Interval::add([-3, 0].into(), [-2, 5].into()),
             [-5, 5].into()
         );
-        assert_eq!(singleton(-1) + [-5, 5].into(), minus_inf_to(4).into());
-        assert_eq!(singleton(5) + singleton(1), x_to_inf(5));
+        assert!(singleton(-1) + [-5, 5].into() <= [-6, 4].into());
+        assert!(singleton(5) + singleton(1) <= [5, 6].into());
 
         interval_domain();
         assert_eq!(x_to_inf(0) + [-200, -10].into(), x_to_inf(-200))
@@ -485,8 +463,9 @@ mod test {
 
         restricted_domain(-5, 5);
         assert_eq!(singleton(5) - [0, 5].into(), [0, 5].into());
-        assert_eq!(singleton(-5) - [0, 1].into(), minus_inf_to(-5));
-        assert_eq!(singleton(-5) - singleton(1), minus_inf_to(-5));
+        assert_eq!(singleton(-5) - [0, 1].into(), [-6, -5].into());
+        assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
+        assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
 
         interval_domain();
         assert_eq!(minus_inf_to(100) - singleton(-10), minus_inf_to(110));

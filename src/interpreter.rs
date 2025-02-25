@@ -38,12 +38,14 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
 
         let consts = program.extract_constant();
 
+        dbg!(&consts);
+
         let vars = program
             .extract_vars()
             .into_iter()
             .map(|var| {
                 let mut value = D::top();
-                if given_vars.contains_key(var) {
+                if given_vars.contains_key(var.trim()) {
                     value = D::try_from(given_vars[var]).unwrap_or(D::top());
                 }
                 (var, value)
