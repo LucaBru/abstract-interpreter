@@ -98,8 +98,8 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     }
 
     fn bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
-        let tree = PropagationAlgorithm::build(exp, state);
-        tree.local_iterations()
+        let algo = PropagationAlgorithm::build(exp, state);
+        algo.local_iterations()
     }
 
     fn statement_eval(&mut self, stmt: &Statement<'a>, state: &State<'a, D>) -> State<'a, D> {

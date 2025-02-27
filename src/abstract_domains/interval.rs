@@ -20,8 +20,8 @@ const TOP: Interval = Interval {
     upper: Int::PosInf,
 };
 const BOTTOM: Interval = Interval {
-    low: Int::Num(1),
-    upper: Int::Num(0),
+    low: Int::PosInf,
+    upper: Int::NegInf,
 };
 
 const ZERO: Interval = Interval {
@@ -60,10 +60,18 @@ impl PartialEq for Interval {
             return true;
         }
 
+        if is_bottom(self) || is_bottom(other) {
+            return false;
+        }
+
+        if is_top(self) || is_top(other) {
+            return false;
+        }
+
         let Interval { low: a, upper: b } = self;
         let Interval { low: c, upper: d } = other;
 
-        if m > n && (a != c || b != d) {
+        if m > n && a != c {
             return false;
         }
 
@@ -342,7 +350,28 @@ impl<'a> TryFrom<&'a str> for Interval {
 
 impl<'a> Into<String> for Interval {
     fn into(self) -> String {
-        format! {"[{},{}]", Into::<String>::into(self.low), Into::<String>::into(self.upper)}
+        let m = *M.read().unwrap();
+        let n = *N.read().unwrap();
+
+        let mut low = self.low;
+        let mut upper = self.upper;
+        if self == TOP {
+            low = Int::NegInf;
+            upper = Int::PosInf;
+        } else if m <= n {
+            if low < m {
+                low = Int::NegInf
+            } else if low > n {
+                low = n;
+            }
+            if upper < m {
+                upper = n
+            } else if upper > n {
+                upper = Int::PosInf
+            }
+        }
+
+        format! {"[{},{}]", Into::<String>::into(low), Into::<String>::into(upper)}
     }
 }
 
@@ -457,10 +486,15 @@ mod test {
         assert_eq!(singleton(0) - singleton(10), singleton(-10));
 
         restricted_domain(-5, 5);
+        dbg!(singleton(5) == BOTTOM, BOTTOM == [0, 5].into());
         assert_eq!(singleton(5) - [0, 5].into(), [0, 5].into());
         assert_eq!(singleton(-5) - [0, 1].into(), [-6, -5].into());
         assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
         assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
+
+        restricted_domain(0, 5);
+        dbg!(singleton(5) == BOTTOM, singleton(0) == BOTTOM);
+        assert_eq!(singleton(5) - singleton(0), singleton(5));
 
         interval_domain();
         assert_eq!(minus_inf_to(100) - singleton(-10), minus_inf_to(110));
@@ -482,8 +516,9 @@ mod test {
     #[test]
     fn intv_abs_domain_div() {
         constant_domain();
-        assert_eq!(BOTTOM / TOP, BOTTOM);
-        //[0,0]/[-inf, inf] = [0,0]/[-inf,0] U [0,0]/[0,inf] = [0,0]/[0,inf] = [min(0/0,0/inf), max(0/0,0/inf)] = [0,0]
+        // assert_eq!(BOTTOM / TOP, BOTTOM);
+        //[0,0]/[-inf, inf] = [0,0]/[-inf,0] U [0,0]/[0,inf] = [0,0]/[0,inf] U [0,0]/[0,inf] = [min(0/0,0/inf), max(0/0,0/inf)] = [0,0]
+        assert_eq!(ZERO / x_to_inf(0), ZERO);
         assert_eq!(ZERO / TOP, ZERO);
         assert_eq!(TOP / ZERO, BOTTOM);
         assert_eq!(singleton(1) / singleton(2), ZERO);

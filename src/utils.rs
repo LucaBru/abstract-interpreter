@@ -25,7 +25,6 @@ pub fn decorate_code_with_analysis<'a, D: AbstractDomain>(
 
     // Insert invariants in reverse order to preserve correct line positions
     for (pos, inv) in invariants.iter().rev() {
-        println!("Writing inv {inv} at line {}", pos.line);
         code_analysis.insert(pos.line, inv);
     }
     code_analysis.join("\n")

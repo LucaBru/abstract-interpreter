@@ -1,8 +1,4 @@
-use std::{
-    cell::RefCell,
-    collections::HashMap,
-    rc::Rc,
-};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
     abstract_domains::abstract_domain::{AbstractDomain, IntervalBound},
@@ -113,6 +109,7 @@ impl<D: AbstractDomain> Node<D> {
         if self.operator.is_none() {
             return;
         }
+        dbg!(self.operator.clone().unwrap(), *self.value.borrow());
         *self.value.borrow_mut() = match self.operator.clone().unwrap() {
             Op::Or => self.children[0]
                 .value
@@ -127,6 +124,11 @@ impl<D: AbstractDomain> Node<D> {
                     *self.children[0].value.borrow() + *self.children[1].value.borrow()
                 }
                 Operator::Sub => {
+                    dbg!(
+                        *self.children[0].value.borrow(),
+                        *self.children[1].value.borrow(),
+                        *self.children[0].value.borrow() - *self.children[1].value.borrow(),
+                    );
                     *self.children[0].value.borrow() - *self.children[1].value.borrow()
                 }
                 Operator::Mul => {
@@ -171,6 +173,7 @@ impl<D: AbstractDomain> Node<D> {
                     .intersection_abstraction(&slice)
             }
         };
+        dbg!(*self.value.borrow());
     }
 
     fn backward_analysis(&self) {
@@ -209,6 +212,7 @@ pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
 
 impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
     pub fn build(exp: &BooleanExp<'a>, state: &'b State<'a, D>) -> Self {
+        dbg!(exp);
         let mut var_leafs = HashMap::new();
         let tree = Node::build(exp, state, &mut var_leafs);
 
@@ -231,7 +235,9 @@ impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
         while !fixpoint {
             self.tree.forward_analysis();
             let prev = clone_var_leafs();
+            dbg!(&prev);
             self.tree.backward_analysis();
+            dbg!(clone_var_leafs());
             fixpoint = prev == clone_var_leafs();
         }
 
