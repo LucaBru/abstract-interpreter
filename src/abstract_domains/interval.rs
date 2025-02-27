@@ -82,18 +82,13 @@ impl PartialEq for Interval {
 
 impl PartialOrd for Interval {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if *self == BOTTOM && *other != BOTTOM || *self != TOP && *other == TOP {
-            return Some(Ordering::Less);
-        }
-
         if self == other {
             return Some(Ordering::Equal);
         }
 
         let Interval { low: a, upper: b } = self;
         let Interval { low: c, upper: d } = other;
-
-        if c < a && b < d {
+        if *self == BOTTOM && *other != BOTTOM || *self != TOP && *other == TOP || c < a && b < d {
             return Some(Ordering::Less);
         }
 

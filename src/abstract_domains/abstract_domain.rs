@@ -53,8 +53,10 @@ pub trait AbstractDomain:
                 [lhs_ref, rhs_ref]
             }
             Operator::Sub => {
+                dbg!(&lhs, &rhs, &result);
                 let lhs_ref = lhs.intersection_abstraction(&(result + rhs));
                 let rhs_ref = rhs.intersection_abstraction(&(lhs - result));
+                dbg!(&lhs_ref, &rhs_ref);
                 [lhs_ref, rhs_ref]
             }
             Operator::Mul => {

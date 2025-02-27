@@ -1,4 +1,8 @@
-use std::{collections::HashMap, usize};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    rc::Rc,
+};
 
 use crate::{
     abstract_domains::abstract_domain::{AbstractDomain, IntervalBound},
@@ -6,127 +10,133 @@ use crate::{
     state::State,
 };
 
-#[derive(Clone, PartialEq, Debug)]
-struct Node<'a, D: AbstractDomain> {
-    value: D,
-    var: Option<&'a str>,
-}
-
-impl<'a, D: AbstractDomain> Node<'a, D> {
-    fn backward_update(&mut self, value: D) {
-        if self.var.is_some() {
-            self.value = value;
-        }
-    }
-}
-
-fn left_child(i: usize) -> usize {
-    i * 2 + 1
-}
-
-fn right_child(i: usize) -> usize {
-    i * 2 + 2
+#[derive(Debug, Clone)]
+pub enum Op {
+    Arithmetic(Operator),
+    Cond(ConditionOperator),
+    And,
+    Or,
 }
 
 #[derive(Debug)]
-pub struct PropagationAlgo<'a, D: AbstractDomain> {
-    values: HashMap<usize, Node<'a, D>>,
+struct Node<D: AbstractDomain> {
+    value: RefCell<D>,
+    operator: Option<Op>,
+    children: Vec<Rc<Node<D>>>,
 }
 
-impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
-    pub fn build(exp: &BooleanExp<'a>, state_prop: &State<'a, D>) -> PropagationAlgo<'a, D> {
-        PropagationAlgo {
-            values: Self::build_from_bexp(exp, state_prop, 0),
+impl<D: AbstractDomain> Node<D> {
+    fn build<'a>(
+        exp: &BooleanExp<'a>,
+        state: &State<'a, D>,
+        var_leafs: &mut HashMap<&'a str, Rc<Self>>,
+    ) -> Rc<Self> {
+        match exp {
+            BooleanExp::And { lhs, rhs } => Rc::new(Node {
+                value: RefCell::new(D::top()),
+                operator: Some(Op::And),
+                children: vec![
+                    Self::build(lhs, state, var_leafs),
+                    Self::build(rhs, state, var_leafs),
+                ],
+            }),
+            BooleanExp::Or { lhs, rhs } => Rc::new(Node {
+                value: RefCell::new(D::top()),
+                operator: Some(Op::Or),
+                children: vec![
+                    Self::build(lhs, state, var_leafs),
+                    Self::build(rhs, state, var_leafs),
+                ],
+            }),
+            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator }) => {
+                Rc::new(Node {
+                    value: RefCell::new(D::top()),
+                    operator: Some(Op::Cond(*operator)),
+                    children: vec![Self::build_from_aexp(lhs, state, var_leafs)],
+                })
+            }
+            BooleanExp::Boolean(x) if *x == true => Rc::new(Node {
+                value: RefCell::new(D::top()),
+                operator: None,
+                children: vec![],
+            }),
+            _ => Rc::new(Node {
+                value: RefCell::new(D::bottom()),
+                operator: None,
+                children: vec![],
+            }),
         }
     }
 
-    fn build_from_bexp(
-        exp: &BooleanExp<'a>,
-        state_prop: &State<'a, D>,
-        i: usize,
-    ) -> HashMap<usize, Node<'a, D>> {
-        let mut sub_trees_hashmap = match exp {
-            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
-                Self::build_from_bexp(lhs, state_prop, left_child(i))
-                    .into_iter()
-                    .chain(Self::build_from_bexp(rhs, state_prop, right_child(i)))
-                    .collect()
-            }
-            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                Self::build_from_aexp(lhs, state_prop, left_child(i))
-            }
-            _ => HashMap::new(),
-        };
-
-        let v = match exp {
-            BooleanExp::Boolean(x) if *x == false => D::bottom(),
-            _ => D::top(),
-        };
-
-        sub_trees_hashmap.insert(i, Node {
-            value: v,
-            var: None,
-        });
-        sub_trees_hashmap
-    }
-
-    fn build_from_aexp(
+    fn build_from_aexp<'a>(
         exp: &ArithmeticExp<'a>,
         state: &State<'a, D>,
-        i: usize,
-    ) -> HashMap<usize, Node<'a, D>> {
-        let v = match exp {
-            ArithmeticExp::Variable(var) => Node {
-                value: state.lookup(var).clone(),
-                var: Some(var),
-            },
-            ArithmeticExp::Integer(c) => Node {
-                value: D::constant_abstraction(*c),
-                var: None,
-            },
-            _ => Node {
-                value: D::top(),
-                var: None,
-            },
-        };
+        var_leafs: &mut HashMap<&'a str, Rc<Self>>,
+    ) -> Rc<Self> {
+        match exp {
+            ArithmeticExp::Integer(c) => Rc::new(Node {
+                value: RefCell::new(D::constant_abstraction(*c)),
+                operator: None,
+                children: vec![],
+            }),
+            ArithmeticExp::Variable(var) => {
+                let leaf = var_leafs.get(var);
+                if leaf.is_some() {
+                    return Rc::clone(leaf.unwrap());
+                }
 
-        let mut sub_tree_hashmap = match exp {
-            ArithmeticExp::BinaryOperation {
-                lhs,
-                operator: _,
-                rhs,
-            } => Self::build_from_aexp(lhs, state, left_child(i))
-                .into_iter()
-                .chain(Self::build_from_aexp(rhs, state, right_child(i)))
-                .collect(),
-            _ => HashMap::new(),
-        };
-        sub_tree_hashmap.insert(i, v);
-        sub_tree_hashmap
+                let node = Rc::new(Node {
+                    value: RefCell::new(*state.lookup(var)),
+                    operator: None,
+                    children: vec![],
+                });
+
+                var_leafs.insert(var, Rc::clone(&node));
+                node
+            }
+            ArithmeticExp::BinaryOperation { lhs, operator, rhs } => Rc::new(Node {
+                value: RefCell::new(D::top()),
+                operator: Some(Op::Arithmetic(*operator)),
+                children: vec![
+                    Self::build_from_aexp(lhs, state, var_leafs),
+                    Self::build_from_aexp(rhs, state, var_leafs),
+                ],
+            }),
+        }
     }
 
-    fn forward_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
-        match exp {
-            BooleanExp::And { lhs, rhs } => {
-                Self::forward_bexp(lhs, tree, left_child(i));
-                Self::forward_bexp(rhs, tree, right_child(i));
-                tree.get_mut(&i).unwrap().value = tree[&left_child(i)]
-                    .value
-                    .intersection_abstraction(&tree[&(right_child(i))].value);
-            }
-            BooleanExp::Or { lhs, rhs } => {
-                Self::forward_bexp(lhs, tree, left_child(i));
-                Self::forward_bexp(rhs, tree, right_child(i));
-                tree.get_mut(&i).unwrap().value = tree[&(left_child(i))]
-                    .value
-                    .union_abstraction(&tree[&(right_child(i))].value);
-            }
-            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator }) => {
-                /*
-                Note that in case of constant domain, arithmetic forward operator are very rough, i.e. they cause precision loss
-                e.g. take x = [60, 60]. Given x < 0 we obtain an operator which is equal to
-                */
-                Self::forward_aexp(lhs, tree, left_child(i));
+    fn forward_analysis(&self) {
+        self.children
+            .iter()
+            .for_each(|child| child.forward_analysis());
+
+        if self.operator.is_none() {
+            return;
+        }
+        *self.value.borrow_mut() = match self.operator.clone().unwrap() {
+            Op::Or => self.children[0]
+                .value
+                .borrow()
+                .union_abstraction(&self.children[1].value.borrow()),
+            Op::And => self.children[0]
+                .value
+                .borrow()
+                .intersection_abstraction(&self.children[1].value.borrow()),
+            Op::Arithmetic(operator) => match operator {
+                Operator::Add => {
+                    *self.children[0].value.borrow() + *self.children[1].value.borrow()
+                }
+                Operator::Sub => {
+                    *self.children[0].value.borrow() - *self.children[1].value.borrow()
+                }
+                Operator::Mul => {
+                    *self.children[0].value.borrow() * *self.children[1].value.borrow()
+                }
+                Operator::Div => {
+                    *self.children[0].value.borrow() / *self.children[1].value.borrow()
+                }
+            },
+            Op::Cond(operator) => {
                 let slice = match operator {
                     ConditionOperator::Equal => D::constant_abstraction(0),
                     /*
@@ -140,116 +150,100 @@ impl<'a, D: AbstractDomain> PropagationAlgo<'a, D> {
                     2. intersect x with < 0
                     3. 1. U 2.
                     */
-                    ConditionOperator::NotEqual => {
-                        let v = &tree[&(left_child(i))].value;
-                        [
-                            D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1)),
-                            D::interval_abstraction(IntervalBound::Num(1), IntervalBound::PosInf),
-                        ]
-                        .map(|intv| intv.intersection_abstraction(v))
-                        .into_iter()
-                        .reduce(|acc, e| acc.union_abstraction(&e))
-                        .unwrap()
-                    }
+                    ConditionOperator::NotEqual => [
+                        D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1)),
+                        D::interval_abstraction(IntervalBound::Num(1), IntervalBound::PosInf),
+                    ]
+                    .map(|intv| intv.intersection_abstraction(&self.value.borrow()))
+                    .into_iter()
+                    .reduce(|acc, e| acc.union_abstraction(&e))
+                    .unwrap(),
                     ConditionOperator::StrictlyLess => {
                         D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1))
                     }
-                    _ => D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf),
+                    ConditionOperator::GreaterOrEqual => {
+                        D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf)
+                    }
                 };
-
-                tree.get_mut(&i).unwrap().value = tree[&(left_child(i))]
+                self.children[0]
                     .value
+                    .borrow()
                     .intersection_abstraction(&slice)
             }
-            _ => (),
         };
     }
 
-    fn forward_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
-        match exp {
-            ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
-                Self::forward_aexp(lhs, tree, left_child(i));
-                Self::forward_aexp(rhs, tree, right_child(i));
-                let forward_op = match operator {
-                    Operator::Add => D::add,
-                    Operator::Sub => D::sub,
-                    Operator::Mul => D::mul,
-                    Operator::Div => D::div,
-                };
-                tree.get_mut(&i).unwrap().value = forward_op(
-                    tree[&(left_child(i))].value.clone(),
-                    tree[&(right_child(i))].value.clone(),
-                );
-            }
-            _ => (),
-        };
-    }
+    fn backward_analysis(&self) {
+        if self.operator.is_none() {
+            return;
+        }
 
-    fn backward_bexp(exp: &BooleanExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
-        match exp {
-            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
-                let value = tree[&i].value;
-                if let Some(left_node) = tree.get_mut(&(left_child(i))) {
-                    left_node.backward_update(value);
-                };
-                if let Some(right_node) = tree.get_mut(&(left_child(i))) {
-                    right_node.backward_update(value);
-                };
-                Self::backward_bexp(lhs, tree, left_child(i));
-                Self::backward_bexp(rhs, tree, right_child(i));
-            }
-            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                tree.get_mut(&(left_child(i))).unwrap().value = tree[&i].value;
-                Self::backward_aexp(lhs, tree, left_child(i));
-            }
-            _ => (),
-        };
-    }
-
-    fn backward_aexp(exp: &ArithmeticExp<'a>, tree: &mut HashMap<usize, Node<D>>, i: usize) {
-        match exp {
-            ArithmeticExp::BinaryOperation { lhs, operator, rhs } => {
-                let refinement = D::backward_arithmetic_operator(
-                    tree[&(left_child(i))].value,
-                    tree[&(right_child(i))].value,
-                    tree[&i].value,
-                    *operator,
+        match self.operator.clone().unwrap() {
+            Op::And | Op::Or | Op::Cond(_) => self.children.iter().for_each(|child| {
+                *child.value.borrow_mut() = *self.value.borrow();
+                child.backward_analysis();
+            }),
+            Op::Arithmetic(op) => {
+                let operands_refinement = D::backward_arithmetic_operator(
+                    *self.children[0].value.borrow(),
+                    *self.children[1].value.borrow(),
+                    *self.value.borrow(),
+                    op,
                 );
 
-                tree.get_mut(&(left_child(i)))
-                    .unwrap()
-                    .backward_update(refinement[0]);
-                Self::backward_aexp(lhs, tree, left_child(i));
+                *self.children[0].value.borrow_mut() = operands_refinement[0];
+                self.children[0].backward_analysis();
 
-                tree.get_mut(&(right_child(i)))
-                    .unwrap()
-                    .backward_update(refinement[1]);
-                Self::backward_aexp(rhs, tree, right_child(i));
+                *self.children[1].value.borrow_mut() = operands_refinement[1];
+                self.children[1].backward_analysis();
             }
-            _ => (),
+        }
+    }
+}
+
+pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
+    tree: Rc<Node<D>>,
+    state: &'b State<'a, D>,
+    var_leafs: HashMap<&'a str, Rc<Node<D>>>,
+}
+
+impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
+    pub fn build(exp: &BooleanExp<'a>, state: &'b State<'a, D>) -> Self {
+        let mut var_leafs = HashMap::new();
+        let tree = Node::build(exp, state, &mut var_leafs);
+
+        PropagationAlgorithm {
+            tree,
+            state,
+            var_leafs,
         }
     }
 
-    pub fn propagation(&mut self, exp: &BooleanExp<'a>) -> (bool, HashMap<&'a str, D>) {
-        let mut fixed_point = false;
-        let mut satisfiable = true;
-        while !fixed_point && satisfiable {
-            let prev = self.values.clone();
-            Self::forward_bexp(exp, &mut self.values, 0);
+    pub fn local_iterations(&self) -> State<'a, D> {
+        let clone_var_leafs = || -> HashMap<&str, D> {
+            self.var_leafs
+                .iter()
+                .map(|(var, node)| (*var, *node.value.borrow()))
+                .collect()
+        };
 
-            satisfiable = self.values[&0].value != D::bottom();
-            if satisfiable {
-                Self::backward_bexp(exp, &mut self.values, 0);
-                fixed_point = prev == self.values;
-            }
+        let mut fixpoint = false;
+        while !fixpoint {
+            self.tree.forward_analysis();
+            let prev = clone_var_leafs();
+            self.tree.backward_analysis();
+            fixpoint = prev == clone_var_leafs();
         }
 
-        let updated_vars = self
-            .values
-            .values()
-            .filter(|node| node.var.is_some())
-            .map(|node| (node.var.clone().unwrap(), node.value))
-            .collect();
-        (satisfiable, updated_vars)
+        if *self.tree.value.borrow() == D::bottom() {
+            return State::bottom();
+        }
+
+        let mut state = self.state.clone();
+        self.var_leafs
+            .iter()
+            .for_each(|(var, node)| state.update(var, *node.value.borrow()));
+
+        state
     }
 }

@@ -6,7 +6,7 @@ use std::{
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
     parser::ast::{ArithmeticExp, Assignment, BooleanExp, Operator, Position, Statement},
-    propagation_algo::PropagationAlgo,
+    propagation_algo::PropagationAlgorithm,
     state::State,
 };
 
@@ -52,6 +52,8 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
             })
             .collect::<HashMap<&str, D>>();
 
+        dbg!(&vars);
+
         let initial_state = State::new(vars);
         dbg!(&initial_state);
 
@@ -96,20 +98,8 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     }
 
     fn bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
-        let mut prop_algo = PropagationAlgo::build(exp, state);
-
-        let (satisfiable, updated_vars) = prop_algo.propagation(exp);
-
-        if !satisfiable {
-            return State::bottom();
-        }
-
-        let mut state = state.clone();
-        updated_vars
-            .into_iter()
-            .for_each(|(var, value)| state.update(var, value));
-
-        state
+        let tree = PropagationAlgorithm::build(exp, state);
+        tree.local_iterations()
     }
 
     fn statement_eval(&mut self, stmt: &Statement<'a>, state: &State<'a, D>) -> State<'a, D> {
@@ -125,8 +115,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
             }
             Statement::Composition { lhs, rhs } => {
                 let state = self.statement_eval(lhs, state);
-                let state = self.statement_eval(rhs, &state);
-                state
+                self.statement_eval(rhs, &state)
             }
             Statement::Conditional {
                 guard,
@@ -141,12 +130,6 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 t.union(&f)
             }
             Statement::While { line, guard, body } => {
-                //Sem[while b do S]R = C[!b]lim F where F(X) = X widened (R U Sem[S]C[b]X)
-                //want to compute the lim F = least fixed point starting from bottom
-                //nested loops: what about invariant?
-                //depends on outer loop state, which can vary at each iteration
-                //for sure it is upper bounded from its evaluation given the outer loop invariant as state
-
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 let mut iter = vec![];

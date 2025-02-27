@@ -1,5 +1,6 @@
 use std::{
     collections::HashSet,
+    hash::Hash,
     ops::{Neg, Not},
 };
 
@@ -34,21 +35,28 @@ impl<'a> Statement<'a> {
         match self {
             Statement::Skip => HashSet::new(),
             Statement::Assignment(Assignment { var, value: _ }) => HashSet::from([&var[..]]),
-            Statement::Composition { lhs, rhs }
-            | Statement::Conditional {
-                guard: _,
+            Statement::Composition { lhs, rhs } => lhs
+                .extract_vars()
+                .into_iter()
+                .chain(rhs.extract_vars())
+                .collect(),
+            Statement::Conditional {
+                guard,
                 true_branch: lhs,
                 false_branch: rhs,
-            } => {
-                let mut vars = Self::extract_vars(&lhs);
-                vars.extend(Self::extract_vars(&rhs));
-                vars
-            }
+            } => Self::extract_vars(&lhs)
+                .into_iter()
+                .chain(rhs.extract_vars())
+                .chain(guard.extract_vars())
+                .collect(),
             Statement::While {
                 line: _,
-                guard: _,
+                guard,
                 body,
-            } => Self::extract_vars(&body),
+            } => Self::extract_vars(&body)
+                .into_iter()
+                .chain(guard.extract_vars())
+                .collect(),
         }
     }
 
@@ -115,6 +123,22 @@ impl<'a> ArithmeticExp<'a> {
                 .chain(rhs.extract_constants())
                 .collect(),
             _ => HashSet::new(),
+        }
+    }
+
+    pub fn extract_vars(&self) -> HashSet<&'a str> {
+        match self {
+            ArithmeticExp::Variable(x) => HashSet::from([*x]),
+            ArithmeticExp::Integer(_) => HashSet::new(),
+            ArithmeticExp::BinaryOperation {
+                lhs,
+                operator: _,
+                rhs,
+            } => lhs
+                .extract_vars()
+                .into_iter()
+                .chain(rhs.extract_vars())
+                .collect(),
         }
     }
 }
@@ -203,6 +227,20 @@ impl<'a> BooleanExp<'a> {
                 .chain(rhs.extract_constant())
                 .collect(),
             _ => HashSet::new(),
+        }
+    }
+
+    pub fn extract_vars(&self) -> HashSet<&'a str> {
+        match self {
+            BooleanExp::Boolean(_) => HashSet::new(),
+            BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
+                lhs.extract_vars()
+            }
+            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => lhs
+                .extract_vars()
+                .into_iter()
+                .chain(rhs.extract_vars())
+                .collect(),
         }
     }
 }
