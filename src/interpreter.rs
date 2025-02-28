@@ -133,6 +133,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 let mut iter = vec![];
+
                 while !fixpoint {
                     let body_eval = self.statement_eval(body, &Self::bexp_eval(guard, &x));
                     let current = x.widening(&state.union(&body_eval), &self.widening_thresholds);
@@ -144,14 +145,15 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 dbg_iterations(&iter);
 
                 let mut narrowing_iter = vec![];
-                let steps = 0;
+                let mut steps = 0;
                 fixpoint = false;
                 while !fixpoint && steps < self.narrowing_steps {
-                    let k = self.statement_eval(body, &Self::bexp_eval(guard, &x));
-                    let next = x.narrowing(&k);
-                    fixpoint = next == x;
+                    let body_eval = self.statement_eval(body, &Self::bexp_eval(guard, &x));
+                    let current = x.narrowing(&state.union(&body_eval));
+                    fixpoint = current == x;
                     narrowing_iter.push(x);
-                    x = next;
+                    x = current;
+                    steps += 1;
                 }
                 println!("Refine loop invariant with narrowing");
                 dbg_iterations(&narrowing_iter);
