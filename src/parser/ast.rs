@@ -163,6 +163,9 @@ impl<'a> ArithmeticCondition<'a> {
         operator: ConditionOperator,
         rhs: Box<ArithmeticExp<'a>>,
     ) -> Self {
+        if *rhs.as_ref() == ArithmeticExp::Integer(0) {
+            return ArithmeticCondition { lhs, operator };
+        }
         let lhs = Box::new(ArithmeticExp::BinaryOperation {
             lhs,
             operator: Operator::Sub,

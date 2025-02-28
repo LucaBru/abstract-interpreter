@@ -68,8 +68,10 @@ impl Sub for Int {
     type Output = Self;
     fn sub(self, rhs: Self) -> Self::Output {
         match (self, rhs) {
-            (NegInf, x) | (x, NegInf) if x != NegInf => NegInf,
-            (PosInf, x) | (x, PosInf) if x != PosInf => PosInf,
+            (NegInf, x) if x != NegInf => NegInf,
+            (x, NegInf) if x != NegInf => PosInf,
+            (PosInf, x) if x != PosInf => PosInf,
+            (x, PosInf) if x != PosInf => NegInf,
             (Num(lhs), Num(rhs)) => Num(lhs - rhs),
             _ => panic!("Trying to compute PosInf + NegInf or vice-versa, which is undefined "),
         }
@@ -100,15 +102,29 @@ impl Div for Int {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         match (self.clone(), rhs) {
-            (_, NegInf) | (_, PosInf) | (Num(0), Num(0)) => Num(0),
-            (PosInf, Num(0)) => PosInf,
-            (NegInf, Num(0)) => NegInf,
-            (Num(x), Num(0)) if x > 0 => PosInf,
-            (Num(x), Num(0)) if x < 0 => NegInf,
-            (PosInf | NegInf, Num(x)) if x > 0 => self,
-            (PosInf | NegInf, Num(x)) if x < 0 => -self,
+            (_, NegInf | PosInf) | (Num(0), Num(0)) => Num(0),
+            (x, Num(0)) if x > Int::Num(0) => PosInf,
+            (x, Num(0)) if x < Int::Num(0) => NegInf,
             (Num(lhs), Num(rhs)) => Num(lhs / rhs),
             _ => panic!("Unhandled div pattern"),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::abstract_domains::int::Int;
+
+    #[test]
+    fn int_sub() {
+        assert_eq!(Int::Num(0) - Int::NegInf, Int::PosInf);
+        assert_eq!(Int::Num(0) - Int::PosInf, Int::NegInf);
+    }
+
+    #[test]
+    fn int_div() {
+        assert_eq!(Int::NegInf / Int::Num(0), Int::NegInf);
+        assert_eq!(Int::Num(10) / Int::Num(0), Int::PosInf);
+        assert_eq!(Int::PosInf / Int::NegInf, Int::Num(0))
     }
 }

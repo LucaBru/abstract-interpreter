@@ -157,7 +157,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 dbg_iterations(&narrowing_iter);
 
                 self.invariants.insert(line.clone(), x.clone());
-
+                dbg!(&!*guard.clone(), &x, Self::bexp_eval(&!*guard.clone(), &x));
                 Self::bexp_eval(&!*guard.clone(), &x)
             }
         }

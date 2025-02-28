@@ -10,7 +10,7 @@ pub fn decorate_code_with_analysis<'a, D: AbstractDomain>(
     let program_inv = invariants
         .pop_last()
         .map(|(_, inv)| format!("\n# {}", inv))
-        .unwrap_or_else(|| String::from("\n# No invariant found"));
+        .unwrap_or_else(|| String::from("\n# No program invariant found"));
 
     let mut code_analysis: Vec<_> = source_code.lines().collect();
     code_analysis.push(&program_inv);

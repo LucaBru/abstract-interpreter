@@ -379,9 +379,13 @@ impl<'a> Into<String> for Interval {
 mod test {
     use std::ops::{Add, Div, Mul};
 
-    use crate::abstract_domains::{
-        int::Int,
-        interval::{BOTTOM, TOP, ZERO},
+    use crate::{
+        abstract_domains::{
+            abstract_domain::AbstractDomain,
+            int::Int,
+            interval::{BOTTOM, TOP, ZERO},
+        },
+        parser::ast::Operator,
     };
 
     use super::{Interval, M, N};
@@ -486,18 +490,18 @@ mod test {
         assert_eq!(singleton(0) - singleton(10), singleton(-10));
 
         restricted_domain(-5, 5);
-        dbg!(singleton(5) == BOTTOM, BOTTOM == [0, 5].into());
         assert_eq!(singleton(5) - [0, 5].into(), [0, 5].into());
         assert_eq!(singleton(-5) - [0, 1].into(), [-6, -5].into());
         assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
         assert!(singleton(-5) - singleton(1) <= [-6, -5].into());
 
         restricted_domain(0, 5);
-        dbg!(singleton(5) == BOTTOM, singleton(0) == BOTTOM);
         assert_eq!(singleton(5) - singleton(0), singleton(5));
 
         interval_domain();
         assert_eq!(minus_inf_to(100) - singleton(-10), minus_inf_to(110));
+
+        assert_eq!(minus_inf_to(10) - minus_inf_to(-1), TOP);
     }
 
     #[test]
@@ -537,5 +541,10 @@ mod test {
         );
         //[-5,-1] / [0,2] = [-inf, inf]
         //assert_eq!(Interval::from("[-5,1]") / "[0,2]".into(), TOP);
+
+        interval_domain();
+        // C >= 0 => [min X, max X] => [0, inf]
+        // X = (a/c,a/d,b/c,b/d) = (10/0, 10/inf) = (inf, 0)
+        assert_eq!(singleton(10) / x_to_inf(0), x_to_inf(0))
     }
 }

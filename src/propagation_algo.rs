@@ -109,7 +109,6 @@ impl<D: AbstractDomain> Node<D> {
         if self.operator.is_none() {
             return;
         }
-        dbg!(self.operator.clone().unwrap(), *self.value.borrow());
         *self.value.borrow_mut() = match self.operator.clone().unwrap() {
             Op::Or => self.children[0]
                 .value
@@ -124,11 +123,6 @@ impl<D: AbstractDomain> Node<D> {
                     *self.children[0].value.borrow() + *self.children[1].value.borrow()
                 }
                 Operator::Sub => {
-                    dbg!(
-                        *self.children[0].value.borrow(),
-                        *self.children[1].value.borrow(),
-                        *self.children[0].value.borrow() - *self.children[1].value.borrow(),
-                    );
                     *self.children[0].value.borrow() - *self.children[1].value.borrow()
                 }
                 Operator::Mul => {
@@ -173,7 +167,6 @@ impl<D: AbstractDomain> Node<D> {
                     .intersection_abstraction(&slice)
             }
         };
-        dbg!(*self.value.borrow());
     }
 
     fn backward_analysis(&self) {
@@ -202,6 +195,43 @@ impl<D: AbstractDomain> Node<D> {
             }
         }
     }
+
+    fn pretty_print(&self, indent: String, last: bool) {
+        let op = match self.operator.is_none() {
+            true => "Leaf".to_string(),
+            _ => {
+                let op = match self.operator.clone().unwrap() {
+                    Op::And => "&",
+                    Op::Or => "or",
+                    Op::Arithmetic(x) => match x {
+                        Operator::Add => "+",
+                        Operator::Sub => "-",
+                        Operator::Mul => "*",
+                        Operator::Div => "/",
+                    },
+                    Op::Cond(x) => match x {
+                        ConditionOperator::Equal => "=",
+                        ConditionOperator::GreaterOrEqual => ">=",
+                        ConditionOperator::NotEqual => "!=",
+                        ConditionOperator::StrictlyLess => "<",
+                    },
+                };
+                op.to_string()
+            }
+        };
+        println!(
+            "{indent}{op} {}",
+            <D as Into<String>>::into(*self.value.borrow(),),
+        );
+
+        let mut new_indent = format!("{indent}|  ");
+        if last {
+            new_indent = format!("{indent}   ");
+        }
+        self.children.iter().enumerate().for_each(|(idx, child)| {
+            child.pretty_print(new_indent.clone(), idx == self.children.len())
+        });
+    }
 }
 
 pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
@@ -212,7 +242,6 @@ pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
 
 impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
     pub fn build(exp: &BooleanExp<'a>, state: &'b State<'a, D>) -> Self {
-        dbg!(exp);
         let mut var_leafs = HashMap::new();
         let tree = Node::build(exp, state, &mut var_leafs);
 
@@ -230,14 +259,20 @@ impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
                 .map(|(var, node)| (*var, *node.value.borrow()))
                 .collect()
         };
-
+        println!("LOCAL ITERATIONS");
         let mut fixpoint = false;
         while !fixpoint {
             self.tree.forward_analysis();
-            let prev = clone_var_leafs();
-            dbg!(&prev);
+            let prev: HashMap<&str, D> = clone_var_leafs();
+            println!("After forward");
+            self.tree
+                .pretty_print("".to_string(), self.tree.children.len() == 1);
+
             self.tree.backward_analysis();
-            dbg!(clone_var_leafs());
+            println!("After backward");
+            self.tree
+                .pretty_print("".to_string(), self.tree.children.len() == 1);
+
             fixpoint = prev == clone_var_leafs();
         }
 

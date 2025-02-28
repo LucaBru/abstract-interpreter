@@ -24,6 +24,9 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
     }
 
     pub fn update(&mut self, var: &'a str, value: D) {
+        if value == D::bottom() {
+            self.vars = HashMap::new();
+        }
         if self.vars.contains_key(var) {
             self.vars.insert(var, value);
         }
