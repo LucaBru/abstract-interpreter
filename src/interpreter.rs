@@ -6,7 +6,7 @@ use std::{
 use crate::{
     abstract_domains::abstract_domain::AbstractDomain,
     parser::ast::{ArithmeticExp, Assignment, BooleanExp, Operator, Position, Statement},
-    propagation_algo::PropagationAlgorithm,
+    propagation_algo::propagation_algo::PropagationAlgorithm,
     state::State,
 };
 

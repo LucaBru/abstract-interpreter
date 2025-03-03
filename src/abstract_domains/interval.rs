@@ -379,14 +379,10 @@ impl<'a> Into<String> for Interval {
 mod test {
     use std::ops::{Add, Div, Mul};
 
-    use crate::{
-        abstract_domains::{
-            abstract_domain::AbstractDomain,
+    use crate::abstract_domains::{
             int::Int,
             interval::{BOTTOM, TOP, ZERO},
-        },
-        parser::ast::Operator,
-    };
+        };
 
     use super::{Interval, M, N};
 

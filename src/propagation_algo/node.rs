@@ -15,14 +15,14 @@ pub enum Op {
 }
 
 #[derive(Debug)]
-struct Node<D: AbstractDomain> {
-    value: RefCell<D>,
-    operator: Option<Op>,
-    children: Vec<Rc<Node<D>>>,
+pub struct Node<D: AbstractDomain> {
+    pub value: RefCell<D>,
+    pub operator: Option<Op>,
+    pub children: Vec<Rc<Node<D>>>,
 }
 
 impl<D: AbstractDomain> Node<D> {
-    fn build<'a>(
+    pub fn build<'a>(
         exp: &BooleanExp<'a>,
         state: &State<'a, D>,
         var_leafs: &mut HashMap<&'a str, Rc<Self>>,
@@ -101,7 +101,7 @@ impl<D: AbstractDomain> Node<D> {
         }
     }
 
-    fn forward_analysis(&self) {
+    pub fn forward_analysis(&self) {
         self.children
             .iter()
             .for_each(|child| child.forward_analysis());
@@ -169,7 +169,7 @@ impl<D: AbstractDomain> Node<D> {
         };
     }
 
-    fn backward_analysis(&self) {
+    pub fn backward_analysis(&self) {
         if self.operator.is_none() {
             return;
         }
@@ -196,7 +196,7 @@ impl<D: AbstractDomain> Node<D> {
         }
     }
 
-    fn pretty_print(&self, indent: String, last: bool) {
+    pub fn pretty_print(&self, indent: String, last: bool) {
         let op = match self.operator.is_none() {
             true => "Leaf".to_string(),
             _ => {
@@ -231,60 +231,5 @@ impl<D: AbstractDomain> Node<D> {
         self.children.iter().enumerate().for_each(|(idx, child)| {
             child.pretty_print(new_indent.clone(), idx == self.children.len())
         });
-    }
-}
-
-pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
-    tree: Rc<Node<D>>,
-    state: &'b State<'a, D>,
-    var_leafs: HashMap<&'a str, Rc<Node<D>>>,
-}
-
-impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
-    pub fn build(exp: &BooleanExp<'a>, state: &'b State<'a, D>) -> Self {
-        let mut var_leafs = HashMap::new();
-        let tree = Node::build(exp, state, &mut var_leafs);
-
-        PropagationAlgorithm {
-            tree,
-            state,
-            var_leafs,
-        }
-    }
-
-    pub fn local_iterations(&self) -> State<'a, D> {
-        let clone_var_leafs = || -> HashMap<&str, D> {
-            self.var_leafs
-                .iter()
-                .map(|(var, node)| (*var, *node.value.borrow()))
-                .collect()
-        };
-        println!("LOCAL ITERATIONS");
-        let mut fixpoint = false;
-        while !fixpoint {
-            self.tree.forward_analysis();
-            let prev: HashMap<&str, D> = clone_var_leafs();
-            println!("After forward");
-            self.tree
-                .pretty_print("".to_string(), self.tree.children.len() == 1);
-
-            self.tree.backward_analysis();
-            println!("After backward");
-            self.tree
-                .pretty_print("".to_string(), self.tree.children.len() == 1);
-
-            fixpoint = prev == clone_var_leafs();
-        }
-
-        if *self.tree.value.borrow() == D::bottom() {
-            return State::bottom();
-        }
-
-        let mut state = self.state.clone();
-        self.var_leafs
-            .iter()
-            .for_each(|(var, node)| state.update(var, *node.value.borrow()));
-
-        state
     }
 }
