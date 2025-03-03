@@ -31,63 +31,63 @@ pub enum Statement<'a> {
 }
 
 impl<'a> Statement<'a> {
-    pub fn extract_vars(&self) -> HashSet<&'a str> {
+    pub fn extract_vars(&self, vars: &mut HashSet<&'a str>) {
         match self {
-            Statement::Skip => HashSet::new(),
-            Statement::Assignment(Assignment { var, value: _ }) => HashSet::from([&var[..]]),
-            Statement::Composition { lhs, rhs } => lhs
-                .extract_vars()
-                .into_iter()
-                .chain(rhs.extract_vars())
-                .collect(),
+            Statement::Skip => (),
+            Statement::Assignment(Assignment { var, value: _ }) => {
+                vars.insert(var);
+            }
+            Statement::Composition { lhs, rhs } => {
+                lhs.extract_vars(vars);
+                rhs.extract_vars(vars);
+            }
             Statement::Conditional {
                 guard,
                 true_branch: lhs,
                 false_branch: rhs,
-            } => Self::extract_vars(&lhs)
-                .into_iter()
-                .chain(rhs.extract_vars())
-                .chain(guard.extract_vars())
-                .collect(),
+            } => {
+                guard.extract_vars(vars);
+                lhs.extract_vars(vars);
+                rhs.extract_vars(vars);
+            }
             Statement::While {
                 line: _,
                 guard,
                 body,
-            } => Self::extract_vars(&body)
-                .into_iter()
-                .chain(guard.extract_vars())
-                .collect(),
+            } => {
+                guard.extract_vars(vars);
+                body.extract_vars(vars);
+            }
         }
     }
 
-    pub fn extract_constant(&self) -> HashSet<i64> {
+    pub fn extract_constant(&self, consts: &mut HashSet<i64>) {
         match self {
-            Statement::Skip => HashSet::new(),
-            Statement::Assignment(Assignment { var: _, value }) => value.extract_constants(),
+            Statement::Skip => (),
+            Statement::Assignment(Assignment { var: _, value }) => {
+                value.extract_constants(consts);
+            }
             Statement::Conditional {
                 guard,
                 true_branch,
                 false_branch,
-            } => guard
-                .extract_constant()
-                .into_iter()
-                .chain(true_branch.extract_constant())
-                .chain(false_branch.extract_constant())
-                .collect(),
-            Statement::Composition { lhs, rhs } => lhs
-                .extract_constant()
-                .into_iter()
-                .chain(rhs.extract_constant())
-                .collect(),
+            } => {
+                guard.extract_constant(consts);
+                true_branch.extract_constant(consts);
+                false_branch.extract_constant(consts);
+            }
+            Statement::Composition { lhs, rhs } => {
+                lhs.extract_constant(consts);
+                rhs.extract_constant(consts);
+            }
             Statement::While {
                 line: _,
                 guard,
                 body,
-            } => guard
-                .extract_constant()
-                .into_iter()
-                .chain(body.extract_constant())
-                .collect(),
+            } => {
+                guard.extract_constant(consts);
+                body.extract_constant(consts);
+            }
         }
     }
 }
@@ -110,35 +110,37 @@ pub enum ArithmeticExp<'a> {
 }
 
 impl<'a> ArithmeticExp<'a> {
-    pub fn extract_constants(&self) -> HashSet<i64> {
+    pub fn extract_constants(&self, consts: &mut HashSet<i64>) {
         match self {
-            ArithmeticExp::Integer(x) => HashSet::from([*x]),
+            ArithmeticExp::Integer(x) => {
+                consts.insert(*x);
+            }
             ArithmeticExp::BinaryOperation {
                 lhs,
                 operator: _,
                 rhs,
-            } => lhs
-                .extract_constants()
-                .into_iter()
-                .chain(rhs.extract_constants())
-                .collect(),
-            _ => HashSet::new(),
+            } => {
+                lhs.extract_constants(consts);
+                rhs.extract_constants(consts);
+            }
+            _ => (),
         }
     }
 
-    pub fn extract_vars(&self) -> HashSet<&'a str> {
+    pub fn extract_vars(&self, vars: &mut HashSet<&'a str>) {
         match self {
-            ArithmeticExp::Variable(x) => HashSet::from([*x]),
-            ArithmeticExp::Integer(_) => HashSet::new(),
+            ArithmeticExp::Variable(x) => {
+                vars.insert(*x);
+            }
+            ArithmeticExp::Integer(_) => (),
             ArithmeticExp::BinaryOperation {
                 lhs,
                 operator: _,
                 rhs,
-            } => lhs
-                .extract_vars()
-                .into_iter()
-                .chain(rhs.extract_vars())
-                .collect(),
+            } => {
+                lhs.extract_vars(vars);
+                rhs.extract_vars(vars);
+            }
         }
     }
 }
@@ -219,31 +221,30 @@ impl<'a> Not for BooleanExp<'a> {
 }
 
 impl<'a> BooleanExp<'a> {
-    pub fn extract_constant(&self) -> HashSet<i64> {
+    pub fn extract_constant(&self, consts: &mut HashSet<i64>) {
         match self {
             BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                lhs.extract_constants()
+                lhs.extract_constants(consts);
+                consts.insert(0);
             }
-            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => lhs
-                .extract_constant()
-                .into_iter()
-                .chain(rhs.extract_constant())
-                .collect(),
-            _ => HashSet::new(),
+            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
+                lhs.extract_constant(consts);
+                rhs.extract_constant(consts);
+            }
+            _ => (),
         }
     }
 
-    pub fn extract_vars(&self) -> HashSet<&'a str> {
+    pub fn extract_vars(&self, vars: &mut HashSet<&'a str>) {
         match self {
-            BooleanExp::Boolean(_) => HashSet::new(),
+            BooleanExp::Boolean(_) => (),
             BooleanExp::ArithmeticCondition(ArithmeticCondition { lhs, operator: _ }) => {
-                lhs.extract_vars()
+                lhs.extract_vars(vars);
             }
-            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => lhs
-                .extract_vars()
-                .into_iter()
-                .chain(rhs.extract_vars())
-                .collect(),
+            BooleanExp::And { lhs, rhs } | BooleanExp::Or { lhs, rhs } => {
+                lhs.extract_vars(vars);
+                rhs.extract_vars(vars)
+            }
         }
     }
 }

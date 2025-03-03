@@ -29,19 +29,22 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     ) -> Interpreter<'a, D> {
         D::init();
 
-        let narrowing_steps = match env::var("NARROWING_STEPS") {
-            Ok(steps) => steps.parse().unwrap_or(0_usize),
-            _ => 0,
-        };
+        let narrowing_steps = env::var("NARROWING_STEPS")
+            .unwrap_or("0".to_string())
+            .parse()
+            .unwrap_or(0_usize);
 
         dbg!(narrowing_steps);
 
-        let consts = program.extract_constant();
+        let mut consts = HashSet::new();
+        program.extract_constant(&mut consts);
 
         dbg!(&consts);
 
-        let vars = program
-            .extract_vars()
+        let mut vars = HashSet::new();
+        program.extract_vars(&mut vars);
+
+        let vars = vars
             .into_iter()
             .map(|var| {
                 let mut value = D::top();
