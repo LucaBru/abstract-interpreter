@@ -33,29 +33,18 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0_usize);
-
         dbg!(narrowing_steps);
 
         let mut consts = HashSet::new();
         program.extract_constant(&mut consts);
-
         dbg!(&consts);
 
         let mut vars = HashSet::new();
         program.extract_vars(&mut vars);
-
-        let vars = vars
-            .into_iter()
-            .map(|var| {
-                let mut value = D::top();
-                if given_vars.contains_key(var.trim()) {
-                    value = D::try_from(given_vars[var]).unwrap_or(D::top());
-                }
-                (var, value)
-            })
-            .collect::<HashMap<&str, D>>();
-
-        dbg!(&vars);
+        let mut vars: HashMap<&'a str, D> = vars.into_iter().map(|var| (var, D::top())).collect();
+        given_vars.iter().for_each(|(var, value)| {
+            vars.insert(var, D::try_from(value).unwrap_or(D::top()));
+        });
 
         let initial_state = State::new(vars);
         dbg!(&initial_state);
@@ -83,7 +72,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         self.invariants.clone()
     }
 
-    fn aexp_eval(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
+    pub fn aexp_eval(exp: &ArithmeticExp<'a>, state: &State<'a, D>) -> D {
         match exp {
             ArithmeticExp::Variable(var) => state.lookup(var).clone(),
             ArithmeticExp::Integer(x) => D::constant_abstraction(*x),
@@ -101,8 +90,41 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     }
 
     fn bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
-        let algo = PropagationAlgorithm::build(exp, state);
-        algo.local_iterations()
+        /*
+        - propagation algorithm for aexp cond. ==> possible variable refinement
+        - multiple  conditionals can be aggregated using &,| operators
+        - 2 possible strategies:
+            - calculate each cond (now the bexp is an aggregation (&, |) of states), aggregate the states and, given the resulting state re-eval the expr until a fixpoint is reached
+            - what about nested aggregators? (A & B) | C -> programmatically easier to find a fixpoint for each aggregator operators
+         */
+        match exp {
+            BooleanExp::Boolean(true) => state.clone(),
+            BooleanExp::Boolean(false) => State::bottom(),
+            BooleanExp::ArithmeticCondition(cond) => {
+                let algo = PropagationAlgorithm::build(cond, state);
+                algo.local_iterations()
+            }
+            BooleanExp::And { lhs, rhs } => {
+                let mut fixpoint = false;
+                let mut x = state.clone();
+                while !fixpoint {
+                    let current = Self::bexp_eval(lhs, &x).intersection(&Self::bexp_eval(rhs, &x));
+                    fixpoint = current == x || current == State::bottom();
+                    x = current;
+                }
+                x
+            }
+            BooleanExp::Or { lhs, rhs } => {
+                let mut fixpoint = false;
+                let mut x = state.clone();
+                while !fixpoint {
+                    let current = Self::bexp_eval(lhs, &x).union(&Self::bexp_eval(rhs, &x));
+                    fixpoint = current == x || current == State::bottom();
+                    x = current;
+                }
+                x
+            }
+        }
     }
 
     fn statement_eval(&mut self, stmt: &Statement<'a>, state: &State<'a, D>) -> State<'a, D> {
@@ -126,7 +148,6 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 false_branch,
             } => {
                 let t = self.statement_eval(true_branch, &Self::bexp_eval(guard, state));
-
                 let f =
                     self.statement_eval(false_branch, &Self::bexp_eval(&!*guard.clone(), state));
 

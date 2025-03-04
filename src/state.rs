@@ -50,6 +50,23 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         r
     }
 
+    pub fn intersection(&self, other: &Self) -> Self {
+        if self.vars.is_empty() || other.vars.is_empty() {
+            return Self::bottom();
+        }
+
+        assert!(self.vars.keys().all(|var| other.vars.contains_key(var)));
+        let mut r = self.clone();
+        other.vars.iter().for_each(|(var, value)| {
+            let old_value = r.vars.insert(var, value.clone());
+            if old_value.is_some() {
+                r.vars
+                    .insert(var, old_value.unwrap().intersection_abstraction(value));
+            }
+        });
+        r
+    }
+
     pub fn lookup(&self, var: &'b str) -> &D {
         self.vars.get(var).unwrap()
     }
