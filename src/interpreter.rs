@@ -28,16 +28,15 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         given_vars: HashMap<&'a str, &str>,
     ) -> Interpreter<'a, D> {
         D::init();
-
         let narrowing_steps = env::var("NARROWING_STEPS")
             .unwrap_or("0".to_string())
             .parse()
             .unwrap_or(0_usize);
-        dbg!(narrowing_steps);
+        println!("Narrowing steps: {narrowing_steps}");
 
         let mut consts = HashSet::new();
         program.extract_constant(&mut consts);
-        dbg!(&consts);
+        println!("Constants in the program: {:#?}", &consts);
 
         let mut vars = HashSet::new();
         program.extract_vars(&mut vars);
@@ -47,7 +46,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
         });
 
         let initial_state = State::new(vars);
-        dbg!(&initial_state);
+        println!("Initial state {initial_state}");
 
         Interpreter {
             program,
@@ -90,13 +89,6 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
     }
 
     fn bexp_eval(exp: &BooleanExp<'a>, state: &State<'a, D>) -> State<'a, D> {
-        /*
-        - propagation algorithm for aexp cond. ==> possible variable refinement
-        - multiple  conditionals can be aggregated using &,| operators
-        - 2 possible strategies:
-            - calculate each cond (now the bexp is an aggregation (&, |) of states), aggregate the states and, given the resulting state re-eval the expr until a fixpoint is reached
-            - what about nested aggregators? (A & B) | C -> programmatically easier to find a fixpoint for each aggregator operators
-         */
         match exp {
             BooleanExp::Boolean(true) => state.clone(),
             BooleanExp::Boolean(false) => State::bottom(),
@@ -153,37 +145,39 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
 
                 t.union(&f)
             }
-            Statement::While { line, guard, body } => {
+            Statement::While { pos, guard, body } => {
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 let mut iter = vec![];
 
                 while !fixpoint {
-                    let body_eval = self.statement_eval(body, &Self::bexp_eval(guard, &x));
-                    let current = x.widening(&state.union(&body_eval), &self.widening_thresholds);
+                    let body_semantic = self.statement_eval(body, &Self::bexp_eval(guard, &x));
+                    let current =
+                        x.widening(&state.union(&body_semantic), &self.widening_thresholds);
                     fixpoint = x == current;
                     iter.push(x);
                     x = current;
                 }
-                println!("Seeking loop invariant");
+                iter.push(x.clone());
+                println!("Seeking loop invariant at line {}", pos.line);
                 dbg_iterations(&iter);
 
                 let mut narrowing_iter = vec![];
                 let mut steps = 0;
                 fixpoint = false;
                 while !fixpoint && steps < self.narrowing_steps {
-                    let body_eval = self.statement_eval(body, &Self::bexp_eval(guard, &x));
-                    let current = x.narrowing(&state.union(&body_eval));
+                    let body_semantic = self.statement_eval(body, &Self::bexp_eval(guard, &x));
+                    let current = x.narrowing(&state.union(&body_semantic));
                     fixpoint = current == x;
                     narrowing_iter.push(x);
                     x = current;
                     steps += 1;
                 }
-                println!("Refine loop invariant with narrowing");
+                narrowing_iter.push(x.clone());
+                println!("Refine loop invariant at line {} with narrowing", pos.line);
                 dbg_iterations(&narrowing_iter);
 
-                self.invariants.insert(line.clone(), x.clone());
-                dbg!(&!*guard.clone(), &x, Self::bexp_eval(&!*guard.clone(), &x));
+                self.invariants.insert(pos.clone(), x.clone());
                 Self::bexp_eval(&!*guard.clone(), &x)
             }
         }

@@ -105,6 +105,10 @@ impl Div for Int {
             (_, NegInf | PosInf) | (Num(0), Num(0)) => Num(0),
             (x, Num(0)) if x > Int::Num(0) => PosInf,
             (x, Num(0)) if x < Int::Num(0) => NegInf,
+            (PosInf, x) if x > Int::Num(0) => PosInf,
+            (NegInf, x) if x > Int::Num(0) => NegInf,
+            (PosInf, x) if x < Int::Num(0) => NegInf,
+            (NegInf, x) if x < Int::Num(0) => PosInf,
             (Num(lhs), Num(rhs)) => Num(lhs / rhs),
             _ => panic!("Unhandled div pattern"),
         }
@@ -122,9 +126,18 @@ mod test {
     }
 
     #[test]
+    fn int_mul() {
+        assert_eq!(Int::NegInf * Int::Num(0), Int::Num(0));
+        assert_eq!(Int::PosInf * Int::Num(10), Int::PosInf);
+        assert_eq!(Int::NegInf * Int::Num(-1), Int::PosInf);
+        assert_eq!(Int::Num(10) * Int::Num(4), Int::Num(40));
+    }
+
+    #[test]
     fn int_div() {
         assert_eq!(Int::NegInf / Int::Num(0), Int::NegInf);
         assert_eq!(Int::Num(10) / Int::Num(0), Int::PosInf);
-        assert_eq!(Int::PosInf / Int::NegInf, Int::Num(0))
+        assert_eq!(Int::PosInf / Int::NegInf, Int::Num(0));
+        assert_eq!(Int::NegInf / Int::Num(-1), Int::PosInf);
     }
 }

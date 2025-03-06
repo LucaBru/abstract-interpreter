@@ -50,9 +50,9 @@ pub Statement: Box<ast::Statement<'input>> = {
       false_branch
     })
   },
-  <line:"while"> <guard: BooleanExp> "do" <body: StatementTerm> => {
+  <pos:"while"> <guard: BooleanExp> "do" <body: StatementTerm> => {
     Box::new(ast::Statement::While{
-      line,
+      pos,
       guard,
       body
     })

@@ -211,7 +211,6 @@ impl AbstractDomain for Interval {
             Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::NegInf),
             Err(_) => Int::NegInf,
         };
-        dbg!(m);
         *m_lock = m;
 
         let mut n_lock = N.write().unwrap();
@@ -219,7 +218,7 @@ impl AbstractDomain for Interval {
             Ok(value) => Int::try_from(value.as_str()).unwrap_or(Int::PosInf),
             Err(_) => Int::PosInf,
         };
-        dbg!(n);
+        println!("Interval domain bounds: M: {:#?}, N: {:#?}", m, n);
         *n_lock = n;
     }
 
@@ -380,9 +379,9 @@ mod test {
     use std::ops::{Add, Div, Mul};
 
     use crate::abstract_domains::{
-            int::Int,
-            interval::{BOTTOM, TOP, ZERO},
-        };
+        int::Int,
+        interval::{BOTTOM, TOP, ZERO},
+    };
 
     use super::{Interval, M, N};
 

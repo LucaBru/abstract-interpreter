@@ -2,20 +2,16 @@ use std::{collections::HashMap, rc::Rc};
 
 use crate::{
     abstract_domains::abstract_domain::{AbstractDomain, IntervalBound},
-    parser::ast::{ArithmeticCondition, BooleanExp, ConditionOperator, Operator},
+    parser::ast::{ArithmeticCondition, ConditionOperator},
     state::State,
 };
 
-// note that constant must not be update ==>
-// given x = T ==> x < 0 & true ==> [-inf, -1] & T = [-inf, -1], which is propagated down
-//  pay attention to the union case, and how the leafs value are aggregated together
 use super::node::Node;
 
 pub struct PropagationAlgorithm<'a, 'b, D: AbstractDomain> {
-    tree: Rc<Node<'a, D>>,
+    tree: Rc<Node<D>>,
     state: &'b State<'a, D>,
-    // enough hashset
-    var_leafs: HashMap<&'a str, Rc<Node<'a, D>>>,
+    var_leafs: HashMap<&'a str, Rc<Node<D>>>,
     cond: ConditionOperator,
 }
 
@@ -40,43 +36,38 @@ impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
                 .collect()
         };
 
-        let slice = match self.cond {
-            ConditionOperator::Equal => D::constant_abstraction(0),
-            /*
-            ----------- 0 -------------
-                    [       ]
-                        [   ]
-                [   ]
+        let stl = D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1));
+        let gt = D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf);
+        let sgt = D::interval_abstraction(IntervalBound::Num(1), IntervalBound::PosInf);
 
-            Given intv x
-            1. intersect x with > 0
-            2. intersect x with < 0
-            3. 1. U 2.
-            */
-            ConditionOperator::NotEqual => [
-                D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1)),
-                D::interval_abstraction(IntervalBound::Num(1), IntervalBound::PosInf),
-            ]
-            .map(|intv| intv.intersection_abstraction(&self.tree.get_value()))
-            .into_iter()
-            .reduce(|acc, e| acc.union_abstraction(&e))
-            .unwrap(),
-            ConditionOperator::StrictlyLess => {
-                D::interval_abstraction(IntervalBound::NegInf, IntervalBound::Num(-1))
-            }
-            ConditionOperator::GreaterOrEqual => {
-                D::interval_abstraction(IntervalBound::Num(0), IntervalBound::PosInf)
-            }
+        let slice = &match self.cond {
+            ConditionOperator::Equal => D::constant_abstraction(0),
+            // eventually discard 0 if it is a bound
+            ConditionOperator::NotEqual => stl
+                .intersection_abstraction(&self.tree.get_value())
+                .union_abstraction(&sgt.intersection_abstraction(&self.tree.get_value())),
+            ConditionOperator::StrictlyLess => stl,
+            ConditionOperator::GreaterOrEqual => gt,
         };
+
+        println!("{:#?}", self.cond);
 
         let mut fixpoint = false;
         let mut satisfiable = true;
         while satisfiable && !fixpoint {
             self.tree.forward_analysis();
+
+            println!("After forward analysis");
+            self.tree.pretty_print();
+
             let prev: HashMap<&str, D> = clone_var_leafs();
             satisfiable = self
                 .tree
-                .backward_analysis(self.tree.get_value().intersection_abstraction(&slice));
+                .backward_analysis(self.tree.get_value().intersection_abstraction(slice));
+
+            println!("After backward analysis");
+            self.tree.pretty_print();
+
             fixpoint = prev == clone_var_leafs();
         }
 

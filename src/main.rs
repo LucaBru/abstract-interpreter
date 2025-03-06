@@ -28,12 +28,9 @@ fn main() {
     let lexer = parser::lexer::Lexer::new(&source_code);
     let program = StatementParser::new().parse(&source_code, lexer).unwrap();
 
-    dbg!(&program);
+    println!("Program: {:#?}", &program);
 
     let given_vars = extract_vars_init(&source_code);
-
-    dbg!(&given_vars);
-
     let mut interpreter = Interpreter::<Interval>::build(&program, given_vars);
     let invariants = interpreter.interpret();
 
