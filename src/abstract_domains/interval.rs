@@ -264,41 +264,45 @@ impl AbstractDomain for Interval {
         Interval { low, upper }
     }
 
-    fn widening(&self, rhs: &Self, thresholds: &HashSet<i64>) -> Self {
+    fn widening_operator() -> Option<impl Fn(&Self, &Self, &HashSet<i64>) -> Self> {
         let m = *M.read().unwrap();
         let n = *N.read().unwrap();
 
         if m > n || m != Int::NegInf && n != Int::PosInf {
-            return self.union_abstraction(rhs);
+            // return self.union_abstraction(rhs);
+            return None;
         }
 
-        let thresholds: Vec<Int> = thresholds.into_iter().map(|t| Int::Num(*t)).collect();
-        let low = match self.low <= rhs.low {
-            true => self.low,
-            _ => {
-                let mut t = Int::NegInf;
-                thresholds.iter().for_each(|x| {
-                    if *x > t && *x <= rhs.low {
-                        t = *x
-                    }
-                });
-                t
-            }
-        };
+        fn widening_op(lhs: &Interval, rhs: &Interval, thresholds: &HashSet<i64>) -> Interval {
+            let thresholds: Vec<Int> = thresholds.into_iter().map(|t| Int::Num(*t)).collect();
+            let low = match lhs.low <= rhs.low {
+                true => lhs.low,
+                _ => {
+                    let mut t = Int::NegInf;
+                    thresholds.iter().for_each(|x| {
+                        if *x > t && *x <= rhs.low {
+                            t = *x
+                        }
+                    });
+                    t
+                }
+            };
 
-        let upper = match self.upper >= rhs.upper {
-            true => self.upper,
-            _ => {
-                let mut t = Int::PosInf;
-                thresholds.iter().for_each(|x| {
-                    if *x < t && *x >= rhs.upper {
-                        t = *x
-                    }
-                });
-                t
-            }
-        };
-        Interval { low, upper }
+            let upper = match lhs.upper >= rhs.upper {
+                true => lhs.upper,
+                _ => {
+                    let mut t = Int::PosInf;
+                    thresholds.iter().for_each(|x| {
+                        if *x < t && *x >= rhs.upper {
+                            t = *x
+                        }
+                    });
+                    t
+                }
+            };
+            Interval { low, upper }
+        }
+        Some(widening_op)
     }
 
     fn narrowing(&self, rhs: &Self) -> Self {

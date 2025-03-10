@@ -77,7 +77,12 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         }
     }
 
-    pub fn widening(&self, rhs: &Self, widening_thresholds: &HashSet<i64>) -> Self {
+    pub fn widening(
+        &self,
+        rhs: &Self,
+        thresholds: &HashSet<i64>,
+        widening: impl Fn(&D, &D, &HashSet<i64>) -> D,
+    ) -> Self {
         if self.vars.is_empty() {
             return rhs.clone();
         } else if rhs.vars.is_empty() {
@@ -87,7 +92,7 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         let vars = self
             .vars
             .iter()
-            .map(|(var, value)| (*var, value.widening(rhs.lookup(var), widening_thresholds)))
+            .map(|(var, value)| (*var, widening(value, rhs.lookup(var), thresholds)))
             .collect();
         State { vars }
     }

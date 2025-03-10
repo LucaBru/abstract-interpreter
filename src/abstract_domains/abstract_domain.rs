@@ -33,9 +33,7 @@ pub trait AbstractDomain:
     fn intersection_abstraction(&self, other: &Self) -> Self;
     fn constant_abstraction(c: i64) -> Self;
     fn interval_abstraction(low: IntervalBound, upper: IntervalBound) -> Self;
-    fn widening(&self, rhs: &Self, _thresholds: &HashSet<i64>) -> Self {
-        self.union_abstraction(rhs)
-    }
+    fn widening_operator() -> Option<impl Fn(&Self, &Self, &HashSet<i64>) -> Self>;
     fn narrowing(&self, rhs: &Self) -> Self {
         self.intersection_abstraction(rhs)
     }

@@ -149,14 +149,22 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 let mut iter = vec![];
+                let widening = D::widening_operator();
 
+                // seeking loop invariant
                 while !fixpoint {
-                    let body_semantic = self.statement_eval(body, &Self::bexp_eval(guard, &x));
-                    let current =
-                        x.widening(&state.union(&body_semantic), &self.widening_thresholds);
-                    fixpoint = x == current;
+                    let mut next_iter_sem =
+                        state.union(&self.statement_eval(body, &Self::bexp_eval(guard, &x)));
+                    if widening.is_some() {
+                        next_iter_sem = x.widening(
+                            &next_iter_sem,
+                            &self.widening_thresholds,
+                            widening.as_ref().unwrap(),
+                        )
+                    }
+                    fixpoint = x == next_iter_sem;
                     iter.push(x);
-                    x = current;
+                    x = next_iter_sem;
                 }
                 iter.push(x.clone());
                 println!("Seeking loop invariant at line {}", pos.line);
@@ -165,6 +173,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let mut narrowing_iter = vec![];
                 let mut steps = 0;
                 fixpoint = false;
+                // refining loop invariant
                 while !fixpoint && steps < self.narrowing_steps {
                     let body_semantic = self.statement_eval(body, &Self::bexp_eval(guard, &x));
                     let current = x.narrowing(&state.union(&body_semantic));
