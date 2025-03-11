@@ -1,10 +1,4 @@
-assume y:=[1,1]
 x := 1;
-y := 0;
-while x < 100 do {
-  x := x + 1;
-  while y < 12 do {
-    y := y + 4
-  };
-  while false do {skip}
+while x < 2 do {
+  x := x + 4
 }

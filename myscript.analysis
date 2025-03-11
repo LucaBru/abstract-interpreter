@@ -1,0 +1,7 @@
+x := 1;
+# LOOP INVARIANT: { x := [1,5] }
+while x < 2 do {
+  x := x + 4
+}
+
+# { x := [2,5] }

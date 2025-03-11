@@ -1,6 +1,3 @@
 /.vscode
 /target
-*.pdf
-*.toy
 *.txt
-*.analysis
