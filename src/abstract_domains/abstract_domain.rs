@@ -29,13 +29,13 @@ pub trait AbstractDomain:
     fn init() {}
     fn top() -> Self;
     fn bottom() -> Self;
-    fn union_abstraction(&self, other: &Self) -> Self;
-    fn intersection_abstraction(&self, other: &Self) -> Self;
+    fn lub(&self, other: &Self) -> Self;
+    fn glb(&self, other: &Self) -> Self;
     fn constant_abstraction(c: i64) -> Self;
     fn interval_abstraction(low: IntervalBound, upper: IntervalBound) -> Self;
     fn widening_operator() -> Option<impl Fn(&Self, &Self, &HashSet<i64>) -> Self>;
     fn narrowing(&self, rhs: &Self) -> Self {
-        self.intersection_abstraction(rhs)
+        self.glb(rhs)
     }
 
     fn backward_arithmetic_operator(
@@ -46,18 +46,18 @@ pub trait AbstractDomain:
     ) -> [Self; 2] {
         match operator {
             Operator::Add => {
-                let lhs_ref = lhs.intersection_abstraction(&(result - rhs));
-                let rhs_ref = rhs.intersection_abstraction(&(result - lhs));
+                let lhs_ref = lhs.glb(&(result - rhs));
+                let rhs_ref = rhs.glb(&(result - lhs));
                 [lhs_ref, rhs_ref]
             }
             Operator::Sub => {
-                let lhs_ref = lhs.intersection_abstraction(&(result + rhs));
-                let rhs_ref = rhs.intersection_abstraction(&(lhs - result));
+                let lhs_ref = lhs.glb(&(result + rhs));
+                let rhs_ref = rhs.glb(&(lhs - result));
                 [lhs_ref, rhs_ref]
             }
             Operator::Mul => {
-                let lhs_ref = lhs.intersection_abstraction(&(result / rhs));
-                let rhs_ref = rhs.intersection_abstraction(&(result / lhs));
+                let lhs_ref = lhs.glb(&(result / rhs));
+                let rhs_ref = rhs.glb(&(result / lhs));
                 [lhs_ref, rhs_ref]
             }
             Operator::Div => {
@@ -66,13 +66,11 @@ pub trait AbstractDomain:
                         IntervalBound::Num(-1),
                         IntervalBound::Num(1),
                     );
-                let lhs_ref = lhs.intersection_abstraction(&(s * rhs));
-                let rhs_ref = rhs.intersection_abstraction(&(lhs / s).union_abstraction(
-                    &AbstractDomain::interval_abstraction(
-                        IntervalBound::Num(0),
-                        IntervalBound::Num(0),
-                    ),
-                ));
+                let lhs_ref = lhs.glb(&(s * rhs));
+                let rhs_ref = rhs.glb(&(lhs / s).lub(&AbstractDomain::interval_abstraction(
+                    IntervalBound::Num(0),
+                    IntervalBound::Num(0),
+                )));
                 [lhs_ref, rhs_ref]
             }
         }

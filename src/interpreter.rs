@@ -100,7 +100,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 while !fixpoint {
-                    let current = Self::bexp_eval(lhs, &x).intersection(&Self::bexp_eval(rhs, &x));
+                    let current = Self::bexp_eval(lhs, &x).glb_var_wise(&Self::bexp_eval(rhs, &x));
                     fixpoint = current == x || current == State::bottom();
                     x = current;
                 }
@@ -110,7 +110,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let mut fixpoint = false;
                 let mut x = state.clone();
                 while !fixpoint {
-                    let current = Self::bexp_eval(lhs, &x).union(&Self::bexp_eval(rhs, &x));
+                    let current = Self::bexp_eval(lhs, &x).lub_var_wise(&Self::bexp_eval(rhs, &x));
                     fixpoint = current == x || current == State::bottom();
                     x = current;
                 }
@@ -143,7 +143,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 let f =
                     self.statement_eval(false_branch, &Self::bexp_eval(&!*guard.clone(), state));
 
-                t.union(&f)
+                t.lub_var_wise(&f)
             }
             Statement::While { pos, guard, body } => {
                 let mut fixpoint = false;
@@ -154,7 +154,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 // seeking loop invariant
                 while !fixpoint {
                     let mut next_iter_sem =
-                        state.union(&self.statement_eval(body, &Self::bexp_eval(guard, &x)));
+                        state.lub_var_wise(&self.statement_eval(body, &Self::bexp_eval(guard, &x)));
                     if widening.is_some() {
                         next_iter_sem = x.widening(
                             &next_iter_sem,
@@ -176,7 +176,7 @@ impl<'a, D: AbstractDomain> Interpreter<'a, D> {
                 // refining loop invariant
                 while !fixpoint && steps < self.narrowing_steps {
                     let body_semantic = self.statement_eval(body, &Self::bexp_eval(guard, &x));
-                    let current = x.narrowing(&state.union(&body_semantic));
+                    let current = x.narrowing(&state.lub_var_wise(&body_semantic));
                     fixpoint = current == x;
                     narrowing_iter.push(x);
                     x = current;

@@ -102,12 +102,10 @@ impl Div for Int {
     type Output = Self;
     fn div(self, rhs: Self) -> Self::Output {
         match (self.clone(), rhs) {
-            (_, NegInf | PosInf) | (Num(0), Num(0)) => Num(0),
-            (x, Num(0)) if x > Int::Num(0) => PosInf,
-            (x, Num(0)) if x < Int::Num(0) => NegInf,
+            (_, PosInf | NegInf) => Int::Num(0),
             (PosInf, x) if x > Int::Num(0) => PosInf,
-            (NegInf, x) if x > Int::Num(0) => NegInf,
             (PosInf, x) if x < Int::Num(0) => NegInf,
+            (NegInf, x) if x > Int::Num(0) => NegInf,
             (NegInf, x) if x < Int::Num(0) => PosInf,
             (Num(lhs), Num(rhs)) => Num(lhs / rhs),
             _ => panic!("Unhandled div pattern"),

@@ -178,27 +178,27 @@ impl Div for Interval {
         let Interval { low: a, upper: b } = self;
         let Interval { low: c, upper: d } = rhs;
 
-        if c >= Int::Num(0) {
-            let mut choices = [a / c, a / d, b / c, b / d];
-            choices.sort();
+        if Int::Num(1) <= c {
             Interval {
-                low: choices[0],
-                upper: choices[3],
+                low: min(a / c, a / d),
+                upper: max(b / c, b / d),
             }
-        } else if d <= Int::Num(0) {
-            Interval { low: -b, upper: -a } / Interval { low: -d, upper: -c }
+        } else if d <= Int::Num(-1) {
+            Interval {
+                low: min(b / c, b / d),
+                upper: max(a / c, a / d),
+            }
         } else {
-            (self.clone()
-                / Interval {
-                    low: c,
-                    upper: Int::Num(0),
-                })
-            .union_abstraction(
+            self / (rhs.glb(&Interval {
+                low: Int::Num(1),
+                upper: Int::PosInf,
+            }))
+            .lub(
                 &(self
-                    / Interval {
-                        low: Int::Num(0),
-                        upper: d,
-                    }),
+                    / (rhs.glb(&Interval {
+                        low: Int::NegInf,
+                        upper: Int::Num(-1),
+                    }))),
             )
         }
     }
@@ -228,13 +228,13 @@ impl AbstractDomain for Interval {
     fn top() -> Self {
         TOP
     }
-    fn intersection_abstraction(&self, other: &Self) -> Self {
+    fn glb(&self, other: &Self) -> Self {
         Interval {
             low: max(self.low, other.low),
             upper: min(self.upper, other.upper),
         }
     }
-    fn union_abstraction(&self, other: &Self) -> Self {
+    fn lub(&self, other: &Self) -> Self {
         Interval {
             low: min(self.low, other.low),
             upper: max(self.upper, other.upper),
@@ -269,11 +269,10 @@ impl AbstractDomain for Interval {
         let n = *N.read().unwrap();
 
         if m > n || m != Int::NegInf && n != Int::PosInf {
-            // return self.union_abstraction(rhs);
             return None;
         }
 
-        fn widening_op(lhs: &Interval, rhs: &Interval, thresholds: &HashSet<i64>) -> Interval {
+        fn widening(lhs: &Interval, rhs: &Interval, thresholds: &HashSet<i64>) -> Interval {
             let thresholds: Vec<Int> = thresholds.into_iter().map(|t| Int::Num(*t)).collect();
             let low = match lhs.low <= rhs.low {
                 true => lhs.low,
@@ -302,7 +301,7 @@ impl AbstractDomain for Interval {
             };
             Interval { low, upper }
         }
-        Some(widening_op)
+        Some(widening)
     }
 
     fn narrowing(&self, rhs: &Self) -> Self {

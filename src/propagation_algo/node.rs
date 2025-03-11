@@ -88,11 +88,9 @@ impl<D: AbstractDomain> Node<D> {
 
                 left.backward_analysis(refs[0]) && right.backward_analysis(refs[1])
             }
-            Node::ConstantLeaf { value } => {
-                refinement.intersection_abstraction(value) != D::bottom()
-            }
+            Node::ConstantLeaf { value } => refinement.glb(value) != D::bottom(),
             Node::VarLeaf { value } => {
-                let n = refinement.intersection_abstraction(&value.borrow());
+                let n = refinement.glb(&value.borrow());
                 if n != D::bottom() {
                     *value.borrow_mut() = refinement;
                 }

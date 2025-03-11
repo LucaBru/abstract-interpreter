@@ -32,7 +32,7 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         }
     }
 
-    pub fn union(&self, other: &Self) -> Self {
+    pub fn lub_var_wise(&self, other: &Self) -> Self {
         if self.vars.is_empty() {
             return other.clone();
         } else if other.vars.is_empty() {
@@ -43,14 +43,13 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         other.vars.iter().for_each(|(var, value)| {
             let old_value = r.vars.insert(var, value.clone());
             if old_value.is_some() {
-                r.vars
-                    .insert(var, old_value.unwrap().union_abstraction(value));
+                r.vars.insert(var, old_value.unwrap().lub(value));
             }
         });
         r
     }
 
-    pub fn intersection(&self, other: &Self) -> Self {
+    pub fn glb_var_wise(&self, other: &Self) -> Self {
         if self.vars.is_empty() || other.vars.is_empty() {
             return Self::bottom();
         }
@@ -60,8 +59,7 @@ impl<'a, 'b, D: AbstractDomain> State<'a, D> {
         other.vars.iter().for_each(|(var, value)| {
             let old_value = r.vars.insert(var, value.clone());
             if old_value.is_some() {
-                r.vars
-                    .insert(var, old_value.unwrap().intersection_abstraction(value));
+                r.vars.insert(var, old_value.unwrap().glb(value));
             }
         });
         r

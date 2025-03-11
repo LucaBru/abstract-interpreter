@@ -44,8 +44,8 @@ impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
             ConditionOperator::Equal => D::constant_abstraction(0),
             // eventually discard 0 if it is a bound
             ConditionOperator::NotEqual => stl
-                .intersection_abstraction(&self.tree.get_value())
-                .union_abstraction(&sgt.intersection_abstraction(&self.tree.get_value())),
+                .glb(&self.tree.get_value())
+                .lub(&sgt.glb(&self.tree.get_value())),
             ConditionOperator::StrictlyLess => stl,
             ConditionOperator::GreaterOrEqual => gt,
         };
@@ -63,7 +63,7 @@ impl<'a, 'b, D: AbstractDomain> PropagationAlgorithm<'a, 'b, D> {
             let prev: HashMap<&str, D> = clone_var_leafs();
             satisfiable = self
                 .tree
-                .backward_analysis(self.tree.get_value().intersection_abstraction(slice));
+                .backward_analysis(self.tree.get_value().glb(slice));
 
             println!("After backward analysis");
             self.tree.pretty_print();
